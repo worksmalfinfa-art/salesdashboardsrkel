@@ -113,7 +113,7 @@ def _fetch_table(table, order_col=None, descending=False):
 
 
 class SupabaseDB:
-    _SALES_COLS = ("tenant_name", "sales_date", "sales_hour", "pax_total",
+    _SALES_COLS = ("tenant_id", "sales_date", "sales_hour", "pax_total",
                    "subtotal", "discount_total", "nett_sales",
                    "uploaded_by", "uploaded_at")
     _PG_COLS = ("order_id", "amount", "nett_sales", "tax_amount",
@@ -179,23 +179,30 @@ class SupabaseDB:
         }).eq("email", email).execute()
         self._invalidate()
 
-    # --- Tenants ---
-    def get_tenants(self):
-        return _fetch_table("tenants", order_col="tenant_id")
+    # --- Tenants (the brand) ---
+    def get_tenants(self, active_only=False):
+        df = _fetch_table("tenants", order_col="tenant_id")
+        if active_only and not df.empty and "is_active" in df.columns:
+            df = df[df["is_active"] == True]
+        return df
 
-    def add_tenant(self, tenant_name, esb_branch_name):
-        # Pick the lowest unused id rather than counting rows, so deleting a
-        # tenant and adding another cannot collide on an existing tenant_id.
-        df = self.get_tenants()
-        used = set(df["tenant_id"].astype(str)) if not df.empty and "tenant_id" in df else set()
+    def _next_id(self, df, col, prefix):
+        """Lowest unused id, so deleting then adding cannot collide."""
+        used = set(df[col].astype(str)) if not df.empty and col in df.columns else set()
         n = 1
-        while f"T{n:03d}" in used:
+        while f"{prefix}{n:03d}" in used:
             n += 1
+        return f"{prefix}{n:03d}"
+
+    def add_tenant(self, tenant_name, esb_branch_name=None, category="F&B", pos_type="esb"):
+        tid = self._next_id(self.get_tenants(), "tenant_id", "T")
         self.client.table("tenants").insert({
-            "tenant_id": f"T{n:03d}", "tenant_name": tenant_name,
-            "esb_branch_name": esb_branch_name,
+            "tenant_id": tid, "tenant_name": tenant_name,
+            "esb_branch_name": esb_branch_name or None,
+            "category": category, "pos_type": pos_type,
         }).execute()
         self._invalidate()
+        return tid
 
     def get_tenant_by_branch(self, esb_branch_name):
         df = self.get_tenants()
@@ -204,30 +211,129 @@ class SupabaseDB:
         return match.iloc[0].to_dict() if not match.empty else None
 
     def delete_tenant(self, tenant_id):
-        df = self.get_tenants()
-        if df.empty: return 0, 0
-        match = df[df["tenant_id"] == tenant_id]
-        if match.empty: return 0, 0
-        t_name = match.iloc[0]["tenant_name"]
-        # Counted before the delete; the FK cascade removes these rows for us.
         res = self.client.table("sales_data").select("id", count="exact", head=True) \
-                  .eq("tenant_name", t_name).execute()
+                  .eq("tenant_id", tenant_id).execute()
         sales_count = res.count or 0
-        self.client.table("tenants").delete().eq("tenant_id", tenant_id).execute()
+        out = self.client.table("tenants").delete().eq("tenant_id", tenant_id).execute()
         self._invalidate()
-        return 1, sales_count
+        return (1 if out.data else 0), sales_count
 
-    def edit_tenant(self, tenant_id, new_name, new_branch):
-        # ON UPDATE CASCADE rewrites sales_data.tenant_name automatically.
-        res = self.client.table("tenants").update({
-            "tenant_name": new_name, "esb_branch_name": new_branch,
-        }).eq("tenant_id", tenant_id).execute()
+    def edit_tenant(self, tenant_id, new_name, new_branch,
+                    category=None, pos_type=None, is_active=None):
+        # sales_data keys on tenant_id now, so renaming a brand touches no
+        # sales row at all -- the label lives in exactly one place.
+        payload = {"tenant_name": new_name, "esb_branch_name": new_branch or None}
+        if category is not None:  payload["category"] = category
+        if pos_type is not None:  payload["pos_type"] = pos_type
+        if is_active is not None: payload["is_active"] = bool(is_active)
+        res = self.client.table("tenants").update(payload).eq("tenant_id", tenant_id).execute()
         self._invalidate()
         return bool(res.data)
 
+    # --- Units (the physical space) ---
+    def get_units(self):
+        return _fetch_table("units", order_col="unit_id")
+
+    def add_unit(self, unit_code, unit_name=None, floor=None, area_sqm=None):
+        uid = self._next_id(self.get_units(), "unit_id", "U")
+        self.client.table("units").insert({
+            "unit_id": uid, "unit_code": unit_code, "unit_name": unit_name,
+            "floor": floor, "area_sqm": area_sqm,
+        }).execute()
+        self._invalidate()
+        return uid
+
+    def edit_unit(self, unit_id, **fields):
+        allowed = {k: v for k, v in fields.items()
+                   if k in ("unit_code", "unit_name", "floor", "area_sqm", "is_active")}
+        if not allowed: return False
+        res = self.client.table("units").update(allowed).eq("unit_id", unit_id).execute()
+        self._invalidate()
+        return bool(res.data)
+
+    def delete_unit(self, unit_id):
+        res = self.client.table("units").delete().eq("unit_id", unit_id).execute()
+        self._invalidate()
+        return bool(res.data)
+
+    # --- Tenancies (who occupied which unit, when) ---
+    def get_tenancies(self):
+        return _fetch_table("tenancies", order_col="start_date", descending=True)
+
+    def get_tenancies_detailed(self):
+        """Tenancies with unit code and brand name attached, for display."""
+        tn = self.get_tenancies()
+        if tn.empty: return tn
+        out, units, tenants = tn.copy(), self.get_units(), self.get_tenants()
+        if not units.empty:
+            out = out.merge(units[["unit_id", "unit_code"]], on="unit_id", how="left")
+        if not tenants.empty:
+            out = out.merge(tenants[["tenant_id", "tenant_name"]], on="tenant_id", how="left")
+        out["status"] = out["end_date"].isna().map({True: "Aktif", False: "Selesai"})
+        return out
+
+    def get_active_tenancy(self, unit_id):
+        df = self.get_tenancies()
+        if df.empty: return None
+        m = df[(df["unit_id"] == unit_id) & (df["end_date"].isna())]
+        return m.iloc[0].to_dict() if not m.empty else None
+
+    def add_tenancy(self, unit_id, tenant_id, start_date, end_date=None, notes=None):
+        self.client.table("tenancies").insert({
+            "unit_id": unit_id, "tenant_id": tenant_id,
+            "start_date": str(start_date),
+            "end_date": str(end_date) if end_date else None,
+            "notes": notes,
+        }).execute()
+        self._invalidate()
+
+    def end_tenancy(self, tenancy_id, end_date):
+        self.client.table("tenancies").update({"end_date": str(end_date)}) \
+            .eq("tenancy_id", int(tenancy_id)).execute()
+        self._invalidate()
+
+    def replace_tenant(self, unit_id, new_tenant_id, handover_date):
+        """
+        Hand a unit over to a different brand.
+
+        Closes the outgoing tenancy the day before the hand-over and opens the
+        incoming one on it, so the unit is never occupied twice on the same day
+        -- which the database would reject anyway. No sales row is touched:
+        each brand keeps exactly what it earned, before and after.
+        """
+        handover = pd.to_datetime(handover_date).date()
+        current = self.get_active_tenancy(unit_id)
+        if current:
+            started = pd.to_datetime(current["start_date"]).date()
+            if started >= handover:
+                raise ValueError(
+                    "Tanggal serah terima harus setelah tanggal mulai penyewa "
+                    f"saat ini ({started:%d %b %Y})."
+                )
+            self.end_tenancy(current["tenancy_id"], handover - timedelta(days=1))
+        self.add_tenancy(unit_id, new_tenant_id, handover,
+                         notes=f"Serah terima {handover:%Y-%m-%d}")
+
+    # --- Targets ---
+    def get_targets(self):
+        return _fetch_table("targets", order_col="period_month", descending=True)
+
+    def upsert_target(self, tenant_id, period_month, target_nett, updated_by=None):
+        self.client.table("targets").upsert({
+            "tenant_id": tenant_id,
+            "period_month": str(period_month),
+            "target_nett": int(target_nett),
+            "updated_by": updated_by,
+        }, on_conflict="tenant_id,period_month").execute()
+        self._invalidate()
+
     # --- Sales Data ---
     def get_sales_data(self, tenant_filter=None):
-        df = _fetch_table("sales_data", order_col="sales_date")
+        # Read the view, not the table: it resolves which unit each sale
+        # belonged to by matching the sale's date against the tenancy periods,
+        # so a hand-over splits history at the right day without the app
+        # having to get that date logic right in every dashboard.
+        df = _fetch_table("v_sales_enriched", order_col="sales_date")
         if df.empty: return df
         df = df.copy()
         df["sales_date"] = pd.to_datetime(df["sales_date"], errors="coerce")
@@ -242,16 +348,14 @@ class SupabaseDB:
         # Upsert on the (tenant, date, hour) unique constraint: re-uploading a
         # corrected file refreshes those slots instead of duplicating them.
         self._insert_chunked("sales_data", records,
-                             on_conflict="tenant_name,sales_date,sales_hour")
+                             on_conflict="tenant_id,sales_date,sales_hour")
 
-    def get_existing_keys(self, tenant_name):
-        df = self.get_sales_data(tenant_name)
-        if df.empty: return set()
-        keys = set()
-        for _, row in df.iterrows():
-            d = row["sales_date"].strftime("%Y-%m-%d") if pd.notna(row["sales_date"]) else ""
-            keys.add((row["tenant_name"], d, str(row["sales_hour"])))
-        return keys
+    def get_existing_keys(self, tenant_id):
+        df = _fetch_table("sales_data")
+        if df.empty or "tenant_id" not in df.columns: return set()
+        df = df[df["tenant_id"] == tenant_id]
+        return {(str(r["tenant_id"]), str(r["sales_date"])[:10], str(r["sales_hour"]))
+                for _, r in df.iterrows()}
 
     # --- Playground Data ---
     def get_playground_data(self):
@@ -263,8 +367,21 @@ class SupabaseDB:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         return df
 
+    def get_playground_tenant_id(self):
+        """The tenant registered with pos_type 'playground', if any."""
+        df = self.get_tenants()
+        if df.empty or "pos_type" not in df.columns: return None
+        m = df[df["pos_type"] == "playground"]
+        return m.iloc[0]["tenant_id"] if not m.empty else None
+
     def insert_playground_batch(self, rows):
         records = [dict(zip(self._PG_COLS, r)) for r in rows]
+        # Stamp the owning tenant so Playground is just another tenant to the
+        # master dashboard rather than a hard-coded second world.
+        pg_id = self.get_playground_tenant_id()
+        if pg_id:
+            for rec in records:
+                rec["tenant_id"] = pg_id
         # order_id is the primary key, so the database rejects repeats. Collapse
         # duplicates inside the file first, since one statement cannot touch the
         # same key twice.
@@ -590,6 +707,7 @@ def render_sidebar():
         ]
         if role in ("Super Admin", "Admin"):
             menu.append("🏢 Kelola Tenant")
+            menu.append("🏬 Kelola Unit & Sewa")
         if role == "Super Admin":
             menu.append("👥 Kelola User")
         menu.append("📋 Upload Log")
@@ -2191,9 +2309,10 @@ def page_upload_esb():
                             continue
 
                         tenant_name = tenant["tenant_name"]
+                        tenant_id = tenant["tenant_id"]
                         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         insert_rows = [
-                            (tenant_name, r["sales_date"], r["sales_hour"],
+                            (tenant_id, r["sales_date"], r["sales_hour"],
                              r["pax_total"], r["subtotal"], r["discount_total"],
                              r["nett_sales"], user["email"], now)
                             for r in branch_rows
@@ -2220,6 +2339,209 @@ def page_upload_esb():
 # ============================================================================
 # TENANT MANAGEMENT
 # ============================================================================
+def _occupancy_table(units, tenancies):
+    """One row per unit, with whoever occupies it today."""
+    rows = []
+    for _, u in units.iterrows():
+        active = pd.DataFrame()
+        if not tenancies.empty:
+            active = tenancies[(tenancies["unit_id"] == u["unit_id"]) &
+                               (tenancies["end_date"].isna())]
+        if not active.empty:
+            a = active.iloc[0]
+            rows.append({"Unit": u["unit_code"], "Penyewa": a.get("tenant_name", "—"),
+                         "Sejak": str(a["start_date"])[:10], "Status": "🟢 Terisi"})
+        else:
+            rows.append({"Unit": u["unit_code"], "Penyewa": "—",
+                         "Sejak": "—", "Status": "⚪ Kosong"})
+    return pd.DataFrame(rows)
+
+
+def page_units():
+    st.markdown("## 🏬 Kelola Unit & Masa Sewa")
+    st.caption(
+        "Unit adalah ruang fisiknya dan sifatnya tetap; tenant adalah brand yang "
+        "menempatinya dan bisa berganti. Penjualan selalu melekat pada brand, "
+        "sehingga pergantian penyewa tidak pernah mengubah sejarah siapa pun."
+    )
+    db = get_db()
+    units, tenants = db.get_units(), db.get_tenants()
+    tenancies = db.get_tenancies_detailed()
+    user = st.session_state["user"]
+
+    t_occ, t_swap, t_unit, t_hist, t_target = st.tabs([
+        "🏢 Okupansi", "🔄 Ganti Penyewa", "➕ Unit", "🕓 Riwayat Sewa", "🎯 Target"])
+
+    # ---------- Okupansi saat ini ----------
+    with t_occ:
+        if units.empty:
+            st.info("Belum ada unit. Tambahkan di tab **➕ Unit**.")
+        else:
+            occ = _occupancy_table(units, tenancies)
+            terisi = int((occ["Status"] == "🟢 Terisi").sum())
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Unit", len(occ))
+            c2.metric("Terisi", terisi)
+            c3.metric("Kosong", len(occ) - terisi,
+                      delta=None if len(occ) == terisi else "perlu tenant")
+            st.dataframe(occ, use_container_width=True, hide_index=True)
+
+    # ---------- Ganti penyewa ----------
+    with t_swap:
+        if units.empty or tenants.empty:
+            st.info("Perlu minimal satu unit dan satu tenant terdaftar.")
+        else:
+            st.markdown("#### Serah terima unit ke brand lain")
+            unit_map = {f"{r['unit_code']} ({r['unit_id']})": r for _, r in units.iterrows()}
+            pick = st.selectbox("Unit", list(unit_map.keys()))
+            unit = unit_map[pick]
+            current = db.get_active_tenancy(unit["unit_id"])
+
+            if current:
+                cur_name = tenants[tenants["tenant_id"] == current["tenant_id"]]
+                cur_name = cur_name.iloc[0]["tenant_name"] if not cur_name.empty else current["tenant_id"]
+                st.info(f"Penyewa saat ini: **{cur_name}** — sejak {str(current['start_date'])[:10]}")
+            else:
+                st.warning("Unit ini sedang kosong. Pengisian akan dicatat sebagai penyewa pertama.")
+
+            avail = tenants if current is None else tenants[tenants["tenant_id"] != current["tenant_id"]]
+            if avail.empty:
+                st.error("Tidak ada brand lain yang bisa dipilih. Daftarkan dulu di **Kelola Tenant**.")
+            else:
+                tmap = {f"{r['tenant_name']} ({r['tenant_id']})": r for _, r in avail.iterrows()}
+                new_pick = st.selectbox("Penyewa baru", list(tmap.keys()))
+                new_tenant = tmap[new_pick]
+                handover = st.date_input("Tanggal mulai penyewa baru", value=date.today())
+
+                st.markdown(
+                    f"Penjualan **sampai {handover - timedelta(days=1):%d %b %Y}** tetap "
+                    f"tercatat atas penyewa lama, dan mulai **{handover:%d %b %Y}** "
+                    f"tercatat atas **{new_tenant['tenant_name']}**. "
+                    "Tidak ada satu baris penjualan pun yang diubah."
+                )
+                if st.button("🔄 Proses serah terima", type="primary", use_container_width=True):
+                    try:
+                        db.replace_tenant(unit["unit_id"], new_tenant["tenant_id"], handover)
+                        st.success(
+                            f"✅ **{unit['unit_code']}** kini ditempati "
+                            f"**{new_tenant['tenant_name']}** sejak {handover:%d %b %Y}."
+                        )
+                        st.rerun()
+                    except ValueError as e:
+                        st.error(str(e))
+                    except Exception as e:
+                        st.error(f"Gagal memproses: {e}")
+
+    # ---------- Kelola unit ----------
+    with t_unit:
+        st.markdown("#### Tambah unit")
+        with st.form("add_unit"):
+            c1, c2 = st.columns(2)
+            with c1:
+                u_code = st.text_input("Kode Unit", placeholder="mis. Slot DOD, A-3")
+                u_floor = st.text_input("Lantai", placeholder="mis. GF")
+            with c2:
+                u_name = st.text_input("Keterangan", placeholder="opsional")
+                u_area = st.number_input("Luas (m²)", min_value=0.0, step=0.5, value=0.0)
+            if st.form_submit_button("➕ Tambah Unit", use_container_width=True):
+                if not u_code:
+                    st.error("Kode unit wajib diisi.")
+                else:
+                    db.add_unit(u_code, u_name or None, u_floor or None, u_area or None)
+                    st.success(f"✅ Unit **{u_code}** ditambahkan.")
+                    st.rerun()
+
+        if not units.empty:
+            st.markdown("#### Ubah unit yang ada")
+            st.caption("Edit langsung di tabel, lalu tekan Simpan.")
+            editable = units[["unit_id", "unit_code", "unit_name", "floor", "area_sqm", "is_active"]].copy()
+            edited = st.data_editor(
+                editable, hide_index=True, use_container_width=True, key="unit_editor",
+                disabled=["unit_id"],
+                column_config={
+                    "unit_id":   st.column_config.TextColumn("ID", width="small"),
+                    "unit_code": st.column_config.TextColumn("Kode Unit", required=True),
+                    "unit_name": st.column_config.TextColumn("Keterangan"),
+                    "floor":     st.column_config.TextColumn("Lantai", width="small"),
+                    "area_sqm":  st.column_config.NumberColumn("Luas (m²)", format="%.1f"),
+                    "is_active": st.column_config.CheckboxColumn("Aktif"),
+                })
+            if st.button("💾 Simpan perubahan unit", use_container_width=True):
+                changed = 0
+                for _, row in edited.iterrows():
+                    before = editable[editable["unit_id"] == row["unit_id"]].iloc[0]
+                    if not before.equals(row):
+                        db.edit_unit(row["unit_id"], unit_code=row["unit_code"],
+                                     unit_name=row["unit_name"], floor=row["floor"],
+                                     area_sqm=float(row["area_sqm"]) if pd.notna(row["area_sqm"]) else None,
+                                     is_active=bool(row["is_active"]))
+                        changed += 1
+                st.success(f"✅ {changed} unit diperbarui." if changed else "Tidak ada perubahan.")
+                if changed: st.rerun()
+
+    # ---------- Riwayat sewa ----------
+    with t_hist:
+        if tenancies.empty:
+            st.info("Belum ada riwayat sewa.")
+        else:
+            show = tenancies.copy()
+            show["end_date"] = show["end_date"].fillna("— sekarang")
+            cols = [c for c in ["unit_code", "tenant_name", "start_date", "end_date", "status", "notes"]
+                    if c in show.columns]
+            st.dataframe(
+                show[cols], use_container_width=True, hide_index=True,
+                column_config={
+                    "unit_code":   "Unit",
+                    "tenant_name": "Penyewa",
+                    "start_date":  "Mulai",
+                    "end_date":    "Selesai",
+                    "status":      "Status",
+                    "notes":       "Catatan",
+                })
+            st.caption(
+                "Baris berstatus **Aktif** adalah penyewa yang sedang menempati. "
+                "Database menolak dua masa sewa yang tumpang tindih pada unit yang sama, "
+                "karena tumpang tindih akan menggandakan pendapatan unit itu di setiap laporan."
+            )
+
+    # ---------- Target ----------
+    with t_target:
+        if tenants.empty:
+            st.info("Belum ada tenant.")
+        else:
+            st.markdown("#### Target penjualan bulanan")
+            period = st.date_input("Bulan", value=date.today().replace(day=1),
+                                   help="Tanggal berapa pun; yang dipakai bulannya.")
+            month_start = period.replace(day=1)
+
+            existing = db.get_targets()
+            cur = {}
+            if not existing.empty:
+                sel = existing[existing["period_month"].astype(str).str[:7] == f"{month_start:%Y-%m}"]
+                cur = dict(zip(sel["tenant_id"], sel["target_nett"])) if not sel.empty else {}
+
+            tgt_df = pd.DataFrame({
+                "tenant_id":   tenants["tenant_id"],
+                "Tenant":      tenants["tenant_name"],
+                "Target (Rp)": [int(cur.get(t, 0)) for t in tenants["tenant_id"]],
+            })
+            edited_t = st.data_editor(
+                tgt_df, hide_index=True, use_container_width=True, key="target_editor",
+                disabled=["tenant_id", "Tenant"],
+                column_config={
+                    "tenant_id":   None,
+                    "Tenant":      st.column_config.TextColumn("Tenant"),
+                    "Target (Rp)": st.column_config.NumberColumn("Target (Rp)", min_value=0, step=1_000_000, format="%d"),
+                })
+            if st.button(f"💾 Simpan target {month_start:%B %Y}", use_container_width=True):
+                n = 0
+                for _, r in edited_t.iterrows():
+                    db.upsert_target(r["tenant_id"], month_start, r["Target (Rp)"], user["email"])
+                    n += 1
+                st.success(f"✅ Target {month_start:%B %Y} tersimpan untuk {n} tenant.")
+                st.rerun()
+
+
 def page_tenants():
     render_header()
     db = get_db()
@@ -2911,6 +3233,7 @@ def main():
     elif "Dashboard Playground" in sel: page_dashboard_playground()
     elif "Upload F&B" in sel: page_upload_esb()
     elif "Upload Playground" in sel: page_upload_playground()
+    elif "Unit" in sel: page_units()
     elif "Tenant" in sel: page_tenants()
     elif "User" in sel: page_users()
     elif "Log" in sel: page_upload_log()
