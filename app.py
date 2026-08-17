@@ -496,24 +496,43 @@ def apply_custom_css():
         html, body, [class*="css"] { font-size: 16px; }
         .main .block-container { padding-top: 1.5rem; max-width: 1400px; }
         .app-header {
-            background: linear-gradient(135deg, #1B4332 0%, #2D6A4F 60%, #52B788 100%);
-            padding: 1.8rem 2rem; border-radius: 12px; margin-bottom: 1.5rem; color: white;
+            background: linear-gradient(120deg, #0B1D14 0%, #1B4332 55%, #2D6A4F 100%);
+            padding: 1.45rem 1.9rem; border-radius: 14px; margin-bottom: 1.4rem; color: #fff;
         }
-        .app-header h1 { margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; }
-        .app-header p { margin: 0.3rem 0 0; opacity: 0.85; font-size: 1.05rem; }
+        .app-header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.4px; }
+        .app-header p { margin: 0.35rem 0 0; opacity: 0.72; font-size: 0.95rem; }
+
+        /* KPI cards. A hairline border and a 3px accent rule replace the old
+           heavy left bar and drop shadow: less chrome competing with the
+           numbers, which are the only thing on the card worth looking at. */
         .kpi-card {
-            background: white; border-radius: 10px; padding: 1.3rem;
-            border-left: 5px solid #2D6A4F; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            background: #fff; border: 1px solid #E6EBE8; border-radius: 14px;
+            padding: 1.05rem 1.2rem; position: relative; overflow: hidden;
+            transition: border-color .15s ease, transform .15s ease;
         }
-        .kpi-card.gold { border-left-color: #D4A843; }
-        .kpi-card.red { border-left-color: #E63946; }
-        .kpi-card.blue { border-left-color: #457B9D; }
-        .kpi-card.orange { border-left-color: #E76F51; }
-        .kpi-label { font-size: 0.9rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-        .kpi-value { font-size: 2rem; font-weight: 800; color: #1B4332; margin: 0.2rem 0; }
-        .kpi-delta { font-size: 0.95rem; font-weight: 600; }
-        .kpi-delta.up { color: #52B788; }
+        .kpi-card:hover { border-color: #C3D6CB; transform: translateY(-1px); }
+        .kpi-card::before {
+            content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+            width: 3px; background: #2D6A4F;
+        }
+        .kpi-card.gold::before   { background: #D4A843; }
+        .kpi-card.red::before    { background: #E63946; }
+        .kpi-card.blue::before   { background: #457B9D; }
+        .kpi-card.orange::before { background: #E76F51; }
+        .kpi-label {
+            font-size: 0.78rem; color: #6B7C73; font-weight: 600;
+            letter-spacing: 0.02em; margin-bottom: 0.1rem;
+        }
+        /* tabular-nums keeps digits the same width, so figures stacked in a
+           row of cards line up instead of jittering column to column. */
+        .kpi-value {
+            font-size: 1.65rem; font-weight: 700; color: #12291F; margin: 0.1rem 0 0;
+            line-height: 1.15; font-variant-numeric: tabular-nums;
+        }
+        .kpi-delta { font-size: 0.85rem; font-weight: 600; margin-top: 0.3rem; }
+        .kpi-delta.up { color: #2D6A4F; }
         .kpi-delta.down { color: #E63946; }
+        .kpi-caption { font-size: 0.76rem; color: #8A9990; margin-top: 0.2rem; }
         section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0B1D14, #1B4332); }
         section[data-testid="stSidebar"] .stMarkdown { color: #D8F3DC; font-size: 1rem; }
         section[data-testid="stSidebar"] .stRadio label { font-size: 1.05rem !important; }
@@ -523,38 +542,55 @@ def apply_custom_css():
         .upload-info { background: #F0FFF4; border: 1px dashed #52B788; border-radius: 10px; padding: 1rem 1.5rem; margin-bottom: 1rem; font-size: 1rem; }
         .stat-pill { display: inline-block; background: #F0FFF4; color: #1B4332; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.95rem; font-weight: 600; margin-right: 0.5rem; }
         /* Streamlit global overrides */
-        .stTabs [data-baseweb="tab"] { font-size: 1.05rem !important; font-weight: 600; }
-        .stSelectbox label, .stMultiSelect label, .stDateInput label { font-size: 1rem !important; }
-        .stDataFrame { font-size: 0.95rem; }
-        .stMarkdown p, .stMarkdown li { font-size: 1rem; }
-        h1 { font-size: 2rem !important; }
-        h2 { font-size: 1.6rem !important; }
-        h3 { font-size: 1.3rem !important; }
-        .stButton button { font-size: 1rem !important; }
+        .stTabs [data-baseweb="tab-list"] { gap: 0.3rem; border-bottom: 1px solid #E6EBE8; }
+        .stTabs [data-baseweb="tab"] {
+            font-size: 0.97rem !important; font-weight: 600;
+            padding: 0.55rem 0.9rem; color: #6B7C73;
+        }
+        .stTabs [aria-selected="true"] { color: #1B4332 !important; }
+        .stSelectbox label, .stMultiSelect label, .stDateInput label {
+            font-size: 0.9rem !important; font-weight: 600; color: #4A5A52;
+        }
+        /* tabular-nums again here: columns of rupiah figures only scan cleanly
+           when the digits share a width. */
+        .stDataFrame { font-size: 0.92rem; font-variant-numeric: tabular-nums; }
+        [data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
+        .stMarkdown p, .stMarkdown li { font-size: 0.98rem; }
+        h1 { font-size: 1.9rem !important; letter-spacing: -0.3px; }
+        h2 { font-size: 1.45rem !important; letter-spacing: -0.2px; }
+        h3 { font-size: 1.15rem !important; }
+        h4 { font-size: 1rem !important; color: #1B4332; margin-top: 0.4rem; }
+        .stButton button { font-size: 0.95rem !important; border-radius: 9px; font-weight: 600; }
+        hr { margin: 1.35rem 0; border-color: #E6EBE8; }
     </style>
     """, unsafe_allow_html=True)
 
 
-def render_header():
+def render_header(subtitle=None):
+    # The old subtitle still read "Local Mode (SQLite)", inherited from the
+    # offline build. Pages may now pass their own; the default describes what
+    # this deployment actually is.
+    sub = subtitle or f"Area Management Dashboard · GROVE at CIBIS · v{APP_VERSION}"
     st.markdown(f"""
     <div class="app-header">
         <h1>{APP_ICON} {APP_TITLE}</h1>
-        <p>Area Management Dashboard — ESB POS Sales Intelligence · v{APP_VERSION} · Local Mode (SQLite)</p>
+        <p>{sub}</p>
     </div>
     """, unsafe_allow_html=True)
 
 
-def render_kpi(label, value, delta=None, variant=""):
+def render_kpi(label, value, delta=None, variant="", caption=None):
     delta_html = ""
     if delta is not None:
         cls = "up" if delta >= 0 else "down"
-        arrow = "▲" if delta >= 0 else "▼"
+        arrow = "↑" if delta >= 0 else "↓"
         delta_html = f'<div class="kpi-delta {cls}">{arrow} {abs(delta):.1f}%</div>'
+    cap_html = f'<div class="kpi-caption">{caption}</div>' if caption else ""
     st.markdown(f"""
     <div class="kpi-card {variant}">
         <div class="kpi-label">{label}</div>
         <div class="kpi-value">{value}</div>
-        {delta_html}
+        {delta_html}{cap_html}
     </div>
     """, unsafe_allow_html=True)
 
