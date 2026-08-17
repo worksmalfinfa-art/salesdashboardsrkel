@@ -2400,12 +2400,31 @@ def page_performance():
     with c1:
         month = st.selectbox("Periode", months, index=len(months) - 1)
     prev = months[months.index(month) - 1] if months.index(month) > 0 else None
-    with c2:
-        st.caption(f"Dibandingkan terhadap **{prev}**" if prev
-                   else "Tidak ada periode sebelumnya untuk dibandingkan.")
 
     cur_df = df[df["month"] == month]
     prev_df = df[df["month"] == prev] if prev else df.iloc[0:0]
+
+    # A month still in progress must never be measured against a complete one.
+    # Six days of April against all of March reads as a 76% collapse that never
+    # happened, and a monitoring page that cries wolf is one people stop
+    # reading. Clip the comparison to the same run of days on both sides.
+    cutoff = None
+    last_day = cur_df["sales_date"].max()
+    if pd.notna(last_day) and last_day.date() < pd.Period(month, "M").end_time.date():
+        cutoff = int(last_day.day)
+        if prev:
+            prev_df = prev_df[prev_df["sales_date"].dt.day <= cutoff]
+
+    with c2:
+        if not prev:
+            st.caption("Tidak ada periode sebelumnya untuk dibandingkan.")
+        elif cutoff:
+            st.caption(
+                f"Dibandingkan terhadap **{prev}**, dibatasi **tanggal 1–{cutoff}** "
+                f"di kedua sisi — data {month} memang baru sampai tanggal {cutoff}."
+            )
+        else:
+            st.caption(f"Dibandingkan terhadap **{prev}** — bulan penuh.")
 
     def _agg(d):
         return (d.groupby(["tenant_id", "tenant_name"], dropna=False)
@@ -2451,7 +2470,7 @@ def page_performance():
         lambda t: ((cur.loc[cur["tenant_id"] == t, "sales"].iloc[0] - prev_map[t]) / prev_map[t] * 100)
         if t in prev_map and prev_map[t] else None)
     board["avg_check"] = board.apply(
-        lambda r: r["sales"] / r["visitors"] if r["visitors"] else 0, axis=1)
+        lambda r: round(r["sales"] / r["visitors"]) if r["visitors"] else 0, axis=1)
     board["target"] = board["tenant_id"].map(lambda t: tmap.get(t, 0))
     board["capaian"] = board.apply(
         lambda r: min(r["sales"] / r["target"], 2.0) if r["target"] else 0.0, axis=1)
@@ -2465,12 +2484,12 @@ def page_performance():
         use_container_width=True, hide_index=True,
         column_config={
             "tenant_name": st.column_config.TextColumn("Tenant"),
-            "sales":       st.column_config.NumberColumn("Nett Sales", format="Rp %d"),
+            "sales":       st.column_config.NumberColumn("Nett Sales (Rp)", format="localized"),
             "kontribusi":  st.column_config.ProgressColumn(
                                "Kontribusi", format="%.1f%%", min_value=0, max_value=100),
             "mom":         st.column_config.NumberColumn("MoM", format="%+.1f%%"),
-            "avg_check":   st.column_config.NumberColumn("Rata-rata/Pengunjung", format="Rp %d"),
-            "visitors":    st.column_config.NumberColumn("Pengunjung", format="%d"),
+            "avg_check":   st.column_config.NumberColumn("Rata-rata/Pengunjung (Rp)", format="localized"),
+            "visitors":    st.column_config.NumberColumn("Pengunjung", format="localized"),
             "capaian":     st.column_config.ProgressColumn(
                                "Capaian Target", format="%.0f%%", min_value=0, max_value=2.0),
             "tren":        st.column_config.LineChartColumn("Tren Harian"),
@@ -2486,10 +2505,12 @@ def page_performance():
         drop = board[board["mom"].notna() & (board["mom"] < -10)]
         if not drop.empty:
             st.markdown("#### ⚠️ Perlu perhatian")
+            basis = f"tanggal 1–{cutoff}" if cutoff else "bulan penuh"
             for _, r in drop.sort_values("mom").iterrows():
                 st.warning(
                     f"**{r['tenant_name']}** turun **{abs(r['mom']):.1f}%** "
-                    f"dibanding {prev} — {fmt_rp(r['sales'])} bulan ini."
+                    f"dibanding {prev} — {fmt_rp(r['sales'])} periode ini "
+                    f"(dasar perbandingan: {basis})."
                 )
 
     # ---------- Per unit ----------
@@ -2510,8 +2531,8 @@ def page_performance():
             per_unit, use_container_width=True, hide_index=True,
             column_config={
                 "unit_code": st.column_config.TextColumn("Unit"),
-                "sales":     st.column_config.NumberColumn("Nett Sales", format="Rp %d"),
-                "visitors":  st.column_config.NumberColumn("Pengunjung", format="%d"),
+                "sales":     st.column_config.NumberColumn("Nett Sales (Rp)", format="localized"),
+                "visitors":  st.column_config.NumberColumn("Pengunjung", format="localized"),
                 "brand":     st.column_config.TextColumn("Brand pada periode ini"),
             })
 
