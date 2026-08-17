@@ -1,0 +1,32 @@
+# Streamlit secrets — NEVER commit
+.streamlit/secrets.toml
+
+# Service account credentials
+credentials/
+*service_account*.json
+*credentials*.json
+*.pem
+*.key
+
+# Data files
+*.db
+*.sqlite
+*.sqlite3
+data/
+*.csv
+*.xlsx
+!sample_*.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
