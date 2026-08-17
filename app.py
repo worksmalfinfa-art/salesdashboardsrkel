@@ -701,6 +701,7 @@ def render_sidebar():
             "🏠 Master Dashboard",
             "🍽️ Dashboard F&B",
             "🎪 Dashboard Playground",
+            "📈 Performa Tenant",
             "───────────────",
             "📤 Upload F&B (ESB)",
             "📤 Upload Playground",
@@ -2339,6 +2340,182 @@ def page_upload_esb():
 # ============================================================================
 # TENANT MANAGEMENT
 # ============================================================================
+def _unified_sales(db):
+    """
+    F&B and Playground on one axis: tenant, date, revenue, visitors.
+
+    The two POS systems record different things -- F&B counts pax per hour,
+    Playground counts children and companions per transaction -- so they are
+    reduced to the two measures that mean the same thing on both sides. That
+    is what makes a single property-wide leaderboard honest.
+    """
+    parts = []
+    fnb = db.get_sales_data()
+    if not fnb.empty:
+        parts.append(pd.DataFrame({
+            "tenant_id":   fnb["tenant_id"],
+            "tenant_name": fnb["tenant_name"],
+            "category":    fnb["category"] if "category" in fnb.columns else "F&B",
+            "unit_code":   fnb["unit_code"] if "unit_code" in fnb.columns else None,
+            "sales_date":  fnb["sales_date"],
+            "nett_sales":  fnb["nett_sales"],
+            "visitors":    fnb["pax_total"],
+        }))
+    pg = db.get_playground_data()
+    if not pg.empty:
+        pg_id, name = db.get_playground_tenant_id(), "Playground"
+        tenants = db.get_tenants()
+        if pg_id is not None and not tenants.empty:
+            m = tenants[tenants["tenant_id"] == pg_id]
+            if not m.empty: name = m.iloc[0]["tenant_name"]
+        parts.append(pd.DataFrame({
+            "tenant_id":   pg_id,
+            "tenant_name": name,
+            "category":    "Playground",
+            "unit_code":   None,
+            "sales_date":  pg["sales_date"],
+            "nett_sales":  pg["nett_sales"],
+            "visitors":    pg["child_total"] + pg["companion_total"],
+        }))
+    if not parts: return pd.DataFrame()
+    out = pd.concat(parts, ignore_index=True)
+    out["month"] = out["sales_date"].dt.to_period("M").astype(str)
+    return out
+
+
+def page_performance():
+    st.markdown("## 📈 Performa Tenant")
+    db = get_db()
+    df = _unified_sales(db)
+
+    if df.empty:
+        st.info(
+            "Belum ada data penjualan. Upload file ESB atau CSV Playground "
+            "lebih dulu, lalu halaman ini akan terisi otomatis."
+        )
+        return
+
+    months = sorted(df["month"].unique())
+    c1, c2 = st.columns([2, 3])
+    with c1:
+        month = st.selectbox("Periode", months, index=len(months) - 1)
+    prev = months[months.index(month) - 1] if months.index(month) > 0 else None
+    with c2:
+        st.caption(f"Dibandingkan terhadap **{prev}**" if prev
+                   else "Tidak ada periode sebelumnya untuk dibandingkan.")
+
+    cur_df = df[df["month"] == month]
+    prev_df = df[df["month"] == prev] if prev else df.iloc[0:0]
+
+    def _agg(d):
+        return (d.groupby(["tenant_id", "tenant_name"], dropna=False)
+                 .agg(sales=("nett_sales", "sum"),
+                      visitors=("visitors", "sum"),
+                      days=("sales_date", lambda s: s.dt.date.nunique()))
+                 .reset_index())
+
+    cur, before = _agg(cur_df), _agg(prev_df)
+
+    # ---------- KPI ----------
+    total, total_prev = cur["sales"].sum(), before["sales"].sum()
+    vis, vis_prev = cur["visitors"].sum(), before["visitors"].sum()
+    growth = ((total - total_prev) / total_prev * 100) if total_prev else None
+    check = (total / vis) if vis else 0
+    check_prev = (total_prev / vis_prev) if vis_prev else 0
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Total Nett Sales", fmt_rp(total),
+              delta=f"{growth:+.1f}%" if growth is not None else None)
+    k2.metric("Pengunjung", f"{vis:,.0f}",
+              delta=f"{(vis-vis_prev)/vis_prev*100:+.1f}%" if vis_prev else None)
+    k3.metric("Rata-rata per Pengunjung", fmt_rp(check),
+              delta=f"{(check-check_prev)/check_prev*100:+.1f}%" if check_prev else None)
+    k4.metric("Tenant Aktif", f"{len(cur)}")
+
+    st.divider()
+
+    # ---------- Leaderboard ----------
+    targets = db.get_targets()
+    tmap = {}
+    if not targets.empty:
+        sel = targets[targets["period_month"].astype(str).str[:7] == month]
+        tmap = dict(zip(sel["tenant_id"], sel["target_nett"])) if not sel.empty else {}
+
+    prev_map = dict(zip(before["tenant_id"], before["sales"]))
+    spark = (cur_df.groupby(["tenant_id", cur_df["sales_date"].dt.date])["nett_sales"]
+                   .sum().groupby(level=0).apply(list).to_dict())
+
+    board = cur.copy()
+    board["kontribusi"] = board["sales"] / total * 100 if total else 0
+    board["mom"] = board["tenant_id"].map(
+        lambda t: ((cur.loc[cur["tenant_id"] == t, "sales"].iloc[0] - prev_map[t]) / prev_map[t] * 100)
+        if t in prev_map and prev_map[t] else None)
+    board["avg_check"] = board.apply(
+        lambda r: r["sales"] / r["visitors"] if r["visitors"] else 0, axis=1)
+    board["target"] = board["tenant_id"].map(lambda t: tmap.get(t, 0))
+    board["capaian"] = board.apply(
+        lambda r: min(r["sales"] / r["target"], 2.0) if r["target"] else 0.0, axis=1)
+    board["tren"] = board["tenant_id"].map(lambda t: spark.get(t, []))
+    board = board.sort_values("sales", ascending=False)
+
+    st.markdown("#### Peringkat tenant")
+    st.dataframe(
+        board[["tenant_name", "sales", "kontribusi", "mom", "avg_check",
+               "visitors", "capaian", "tren"]],
+        use_container_width=True, hide_index=True,
+        column_config={
+            "tenant_name": st.column_config.TextColumn("Tenant"),
+            "sales":       st.column_config.NumberColumn("Nett Sales", format="Rp %d"),
+            "kontribusi":  st.column_config.ProgressColumn(
+                               "Kontribusi", format="%.1f%%", min_value=0, max_value=100),
+            "mom":         st.column_config.NumberColumn("MoM", format="%+.1f%%"),
+            "avg_check":   st.column_config.NumberColumn("Rata-rata/Pengunjung", format="Rp %d"),
+            "visitors":    st.column_config.NumberColumn("Pengunjung", format="%d"),
+            "capaian":     st.column_config.ProgressColumn(
+                               "Capaian Target", format="%.0f%%", min_value=0, max_value=2.0),
+            "tren":        st.column_config.LineChartColumn("Tren Harian"),
+        })
+    if not tmap:
+        st.caption(
+            f"Kolom Capaian Target kosong karena target {month} belum diisi. "
+            "Isi di **Kelola Unit & Sewa → 🎯 Target**."
+        )
+
+    # ---------- Perhatian ----------
+    if prev:
+        drop = board[board["mom"].notna() & (board["mom"] < -10)]
+        if not drop.empty:
+            st.markdown("#### ⚠️ Perlu perhatian")
+            for _, r in drop.sort_values("mom").iterrows():
+                st.warning(
+                    f"**{r['tenant_name']}** turun **{abs(r['mom']):.1f}%** "
+                    f"dibanding {prev} — {fmt_rp(r['sales'])} bulan ini."
+                )
+
+    # ---------- Per unit ----------
+    if "unit_code" in cur_df.columns and cur_df["unit_code"].notna().any():
+        st.markdown("#### Performa per unit")
+        st.caption(
+            "Diagregasi berdasarkan ruang, bukan brand. Kalau sebuah unit berganti "
+            "penyewa di tengah periode, angkanya menggabungkan kontribusi kedua brand "
+            "sesuai tanggal masing-masing."
+        )
+        per_unit = (cur_df.dropna(subset=["unit_code"])
+                          .groupby("unit_code")
+                          .agg(sales=("nett_sales", "sum"),
+                               visitors=("visitors", "sum"),
+                               brand=("tenant_name", lambda s: ", ".join(sorted(set(s)))))
+                          .reset_index().sort_values("sales", ascending=False))
+        st.dataframe(
+            per_unit, use_container_width=True, hide_index=True,
+            column_config={
+                "unit_code": st.column_config.TextColumn("Unit"),
+                "sales":     st.column_config.NumberColumn("Nett Sales", format="Rp %d"),
+                "visitors":  st.column_config.NumberColumn("Pengunjung", format="%d"),
+                "brand":     st.column_config.TextColumn("Brand pada periode ini"),
+            })
+
+
 def _occupancy_table(units, tenancies):
     """One row per unit, with whoever occupies it today."""
     rows = []
@@ -3233,6 +3410,8 @@ def main():
     elif "Dashboard Playground" in sel: page_dashboard_playground()
     elif "Upload F&B" in sel: page_upload_esb()
     elif "Upload Playground" in sel: page_upload_playground()
+    # Must precede the "Tenant" test below -- "Performa Tenant" contains it.
+    elif "Performa" in sel: page_performance()
     elif "Unit" in sel: page_units()
     elif "Tenant" in sel: page_tenants()
     elif "User" in sel: page_users()
