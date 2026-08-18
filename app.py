@@ -69,6 +69,8 @@ from datetime import datetime, timedelta, date
 from io import BytesIO
 import openpyxl
 
+pd.set_option("future.no_silent_downcasting", True)
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -659,15 +661,26 @@ def kpi(col, label, value, delta=None, help=None):
         st.metric(label, value, delta=delta, help=help)
 
 
-def show_chart(fig, height=None):
-    """Charts inherit the grove template; only the toolbar config is set here."""
+DEFAULT_CHART_CONFIG = {
+    "displayModeBar": True, "displaylogo": False,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d", "toImage",
+                               "autoScale2d", "toggleSpikelines"],
+    "scrollZoom": False}
+
+
+def show_chart(fig, height=None, **kw):
+    """
+    Charts inherit the grove template; only the toolbar config is set here.
+
+    Accepts and discards the keywords the old signature took, because 40 call
+    sites still pass them and a rename that breaks a page at runtime is worse
+    than a tolerant wrapper.
+    """
     if height:
         fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True, config={
-        "displayModeBar": True, "displaylogo": False,
-        "modeBarButtonsToRemove": ["lasso2d", "select2d", "toImage",
-                                   "autoScale2d", "toggleSpikelines"],
-        "scrollZoom": False})
+    kw.pop("use_container_width", None)
+    cfg = kw.pop("config", None) or DEFAULT_CHART_CONFIG
+    st.plotly_chart(fig, use_container_width=True, config=cfg, **kw)
 
 
 def tenant_table(df, cols, height=None):
@@ -2610,8 +2623,8 @@ def page_performance():
                               yaxis=dict(visible=False), showlegend=False, bargap=.4,
                               xaxis=dict(showgrid=False, tickfont=dict(size=11, color="#8B948D")))
             show_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            st.markdown('<p class="foot" style="margin:0">Bar pekat menandai hari di atas '
-                        'rata-rata, bar diarsir di bawahnya.</p>', unsafe_allow_html=True)
+            st.caption("Bar pekat menandai hari di atas rata-rata, "
+                       "bar diarsir di bawahnya.")
 
     with c[1]:
         if not falling.empty:
@@ -2696,9 +2709,8 @@ def page_performance():
                     "sales":     st.column_config.NumberColumn("Nett Sales (Rp)", format="localized"),
                     "visitors":  st.column_config.NumberColumn("Pengunjung", format="localized"),
                 })
-            st.markdown('<p class="foot" style="margin:0">Unit yang berganti penyewa di tengah '
-                        'periode menjumlahkan kontribusi kedua brand sesuai tanggalnya.</p>',
-                        unsafe_allow_html=True)
+            st.caption("Unit yang berganti penyewa di tengah periode menjumlahkan "
+                       "kontribusi kedua brand sesuai tanggalnya.")
 
 def _occupancy_table(units, tenancies):
     """One row per unit, with whoever occupies it today."""
