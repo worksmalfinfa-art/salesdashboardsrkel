@@ -575,9 +575,14 @@ def apply_custom_css():
     }
     .num{font-variant-numeric:tabular-nums;letter-spacing:-.03em}
 
-    /* Streamlit stacks blocks with a gap; the bento grid supplies its own. */
-    [data-testid="stVerticalBlock"]{gap:.55rem}
-    [data-testid="stHorizontalBlock"]{gap:.6rem}
+    /* Streamlit measures an element container in JavaScript and reports it 16px
+       shorter than the raw HTML rendered inside it. CSS cannot correct that --
+       height:auto, margin resets and box sizing were all measured against the
+       live DOM and none moved it. So the gap accommodates the overflow instead
+       of fighting it. Measured worst-case seam by gap: 0.55rem -> -7px
+       (overlapping), 1rem -> 0, 1.5rem -> +8px clear. */
+    [data-testid="stVerticalBlock"]{gap:1.5rem}
+    [data-testid="stHorizontalBlock"]{gap:.75rem}
     header[data-testid="stHeader"]{background:transparent;height:0}
     footer{display:none}
 
@@ -634,17 +639,20 @@ def apply_custom_css():
        the title carries the top corners and no bottom border, the element the
        bottom corners and no top border, so they read as a single surface
        without either needing to contain the other. */
+    /* The title is a label above the card, not the card's own top edge.
+       Making it the top edge required the two elements to sit flush, and
+       Streamlit sizes an element container from its text while ignoring
+       padding on a child -- measured in a local harness, a 44.6px title
+       inside a 28.6px container. It overflowed onto the chart, and closing
+       the gap with a negative margin only moved the overlap from 7px to 16px.
+       A plain label sidesteps the whole interaction. */
     .chart-title{
-      background:var(--card);border:1.5px solid var(--line);border-bottom:none;
-      border-radius:var(--r) var(--r) 0 0;padding:14px 16px 8px;margin:0;
-      font-size:13.5px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+      font-size:13px;font-weight:700;color:var(--ink);letter-spacing:-.01em;
+      margin:2px 0 0;padding:0 2px}
     [data-testid="stPlotlyChart"],
     [data-testid="stDataFrame"]{
       background:var(--card);border:1.5px solid var(--line);
-      border-radius:0 0 var(--r) var(--r);border-top:none;padding:4px 12px 12px}
-    /* A chart with no title above it still needs all four corners. */
-    [data-testid="stElementContainer"]:first-child > [data-testid="stPlotlyChart"]{
-      border-top:1.5px solid var(--line);border-radius:var(--r)}
+      border-radius:var(--r);padding:10px 12px}
     .cardmark{display:none}
     .box.dark{background:var(--g900);border-color:var(--g900);color:#fff}
     .box h3{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
