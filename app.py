@@ -1039,16 +1039,6 @@ def enrich_df(df):
 
 PLT = dict()
 
-def clean_hover(fig, value_fmt=",.0f", prefix="", suffix=""):
-    """Apply clean hover tooltip to all traces."""
-    for trace in fig.data:
-        nm = trace.name or ""
-        if hasattr(trace, 'orientation') and trace.orientation == 'h':
-            tpl = f"<b>%{{y}}</b><br>{prefix}%{{x:{value_fmt}}}{suffix}<extra>{nm}</extra>"
-        else:
-            tpl = f"<b>%{{x}}</b><br>{prefix}%{{y:{value_fmt}}}{suffix}<extra>{nm}</extra>"
-        trace.hovertemplate = tpl
-    return fig
 
 PLT_FONT = dict(font=dict(family="ui-rounded, Segoe UI, system-ui, sans-serif", size=12))
 
@@ -3384,170 +3374,182 @@ def page_dashboard_playground():
 
 def page_master_dashboard():
     render_header()
-    render_page_head("Master Dashboard", "Konsolidasi seluruh tenant F&B dan Playground")
     db = get_db()
-
-    df_fnb = db.get_sales_data()
-    df_pg = db.get_playground_data()
-
-    fnb_empty = df_fnb.empty
-    pg_empty = df_pg.empty
+    df_fnb, df_pg = db.get_sales_data(), db.get_playground_data()
+    fnb_empty, pg_empty = df_fnb.empty, df_pg.empty
 
     if fnb_empty and pg_empty:
-        st.info("📭 Belum ada data. Upload data F&B dan Playground terlebih dahulu.")
+        render_page_head("Master Dashboard", "Belum ada data")
+        render_card("Belum ada data",
+                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload data F&amp;B '
+                    'atau Playground lebih dulu.</p>')
         return
 
-    # Date filter
-    all_dates = []
-    if not fnb_empty: all_dates.extend(df_fnb["sales_date"].dt.date.tolist())
-    if not pg_empty: all_dates.extend(df_pg["sales_date"].dt.date.tolist())
-    min_d, max_d = min(all_dates), max(all_dates)
+    dates = []
+    if not fnb_empty: dates += df_fnb["sales_date"].tolist()
+    if not pg_empty:  dates += df_pg["sales_date"].tolist()
+    dmin, dmax = min(dates).date(), max(dates).date()
 
-    dr = st.date_input("📅 Rentang Tanggal",
-                       value=(max(min_d, max_d - timedelta(days=30)), max_d),
-                       min_value=min_d, max_value=max_d, key="master_dr")
+    hc = st.columns([3, 1])
+    with hc[1]:
+        dr = st.date_input("Rentang tanggal",
+                           value=(max(dmin, dmax - timedelta(days=30)), dmax),
+                           min_value=dmin, max_value=dmax, key="master_dr",
+                           label_visibility="collapsed")
     if isinstance(dr, tuple) and len(dr) == 2:
         s, e = pd.Timestamp(dr[0]), pd.Timestamp(dr[1])
-        if not fnb_empty: df_fnb = df_fnb[(df_fnb["sales_date"]>=s)&(df_fnb["sales_date"]<=e)]
-        if not pg_empty: df_pg = df_pg[(df_pg["sales_date"]>=s)&(df_pg["sales_date"]<=e)]
+        if not fnb_empty: df_fnb = df_fnb[(df_fnb["sales_date"] >= s) & (df_fnb["sales_date"] <= e)]
+        if not pg_empty:  df_pg = df_pg[(df_pg["sales_date"] >= s) & (df_pg["sales_date"] <= e)]
+    else:
+        dr = (dmin, dmax)
+    fnb_empty, pg_empty = df_fnb.empty, df_pg.empty
+    with hc[0]:
+        render_page_head("Master Dashboard",
+                         f"Seluruh tenant · {dr[0]:%d %b %Y} – {dr[1]:%d %b %Y}")
 
-    # Compute totals
     fnb_nett = df_fnb["nett_sales"].sum() if not fnb_empty else 0
     fnb_pax = df_fnb["pax_total"].sum() if not fnb_empty else 0
-    pg_amount = df_pg["amount"].sum() if not pg_empty else 0
-    pg_child = df_pg["child_total"].sum() if not pg_empty else 0
-    pg_trx = len(df_pg) if not pg_empty else 0
-    grand_total = fnb_nett + pg_amount
+    pg_nett = df_pg["nett_sales"].sum() if not pg_empty else 0
+    pg_vis = (df_pg["child_total"] + df_pg["companion_total"]).sum() if not pg_empty else 0
+    grand, visitors = fnb_nett + pg_nett, fnb_pax + pg_vis
+    idf = lambda n: f"{n:,.0f}".replace(",", ".")
 
-    # KPIs
-    k1,k2,k3,k4,k5 = st.columns(5)
-    with k1: render_kpi("Grand Total Revenue", fmt_rp(grand_total))
-    with k2: render_kpi("F&B Nett Sales", fmt_rp(fnb_nett), variant="gold")
-    with k3: render_kpi("Playground Revenue", fmt_rp(pg_amount), variant="blue")
-    with k4: render_kpi("F&B Pax", f"{fnb_pax:,}", variant="orange")
-    with k5: render_kpi("Playground Anak", f"{pg_child:,}", variant="red")
+    k = st.columns(4)
+    with k[0]: render_kpi("Total Nett Sales", fmt_rp(grand), featured=True,
+                          caption="F&B dan Playground digabung")
+    with k[1]: render_kpi("F&B", fmt_rp(fnb_nett),
+                          caption=f"{fnb_nett/grand*100:.1f}% dari total" if grand else "belum ada data")
+    with k[2]: render_kpi("Playground", fmt_rp(pg_nett),
+                          caption=f"{pg_nett/grand*100:.1f}% dari total" if grand else None)
+    with k[3]: render_kpi("Pengunjung", idf(visitors),
+                          caption=f"{idf(fnb_pax)} pax · {idf(pg_vis)} playground")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    # F&B and Playground must be told apart at a glance, so they hold two
+    # distinct hues from the palette everywhere on this page. A bulk colour
+    # migration had collapsed both onto the same green, which left the
+    # comparison charts unable to say which half was which.
+    C_FNB, C_PG = GREEN, OCHRE
 
-    tab1,tab2,tab3 = st.tabs(["📊 Overview","📈 Daily Comparison","📆 Monthly Comparison"])
+    t = st.tabs(["Overview", "Perbandingan Harian", "Perbandingan Bulanan"])
 
-    # TAB 1: OVERVIEW
-    with tab1:
-        c1,c2 = st.columns(2)
-        with c1:
-            contrib = pd.DataFrame({"Segment":["F&B Tenants","Playground TnT"],"Revenue":[fnb_nett, pg_amount]})
-            fig_pie = px.pie(contrib,values="Revenue",names="Segment",title="Kontribusi Revenue — F&B vs Playground",
-                             color_discrete_sequence=["#1A6B3F","#1A6B3F"],hole=0.4,**PLT)
-            fig_pie.update_layout(height=460)
-            show_chart(fig_pie, use_container_width=True)
-        with c2:
-            fig_bar = px.bar(contrib,x="Segment",y="Revenue",title="Total Revenue per Segment",
-                             text="Revenue",color="Segment",color_discrete_map={"F&B Tenants":"#1A6B3F","Playground TnT":"#1A6B3F"},**PLT)
-            fig_bar.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
-            fig_bar.update_layout(height=460,showlegend=False)
-            show_chart(fig_bar, use_container_width=True)
+    with t[0]:
+        c = st.columns([1, 2])
+        with c[0]:
+            if True:
+                st.markdown('<div class="chart-title">Kontribusi pendapatan</div>',
+                            unsafe_allow_html=True)
+                fig = go.Figure(go.Pie(
+                    labels=["F&B", "Playground"], values=[fnb_nett, pg_nett], hole=.62,
+                    marker=dict(colors=[C_FNB, C_PG], line=dict(color="#fff", width=2)),
+                    textinfo="percent",
+                    hovertemplate="%{label}<br>Rp %{value:,.0f}<extra></extra>"))
+                fig.update_layout(height=260, margin=dict(t=10, b=10, l=10, r=10),
+                                  legend=dict(orientation="h", y=-0.05, x=.5, xanchor="center"))
+                show_chart(fig)
+        with c[1]:
+            rows = []
+            if not fnb_empty:
+                for _, r in (df_fnb.groupby(["tenant_id", "tenant_name"])["nett_sales"]
+                                   .sum().reset_index().sort_values("nett_sales", ascending=False)
+                                   ).iterrows():
+                    rows.append((r["tenant_id"], r["tenant_name"], "F&B",
+                                 f'<span class="amt num">{fmt_rp(r["nett_sales"])}</span>'))
+            if not pg_empty:
+                rows.append(("T900", "Twist N' Turns", "Playground",
+                             f'<span class="amt num">{fmt_rp(pg_nett)}</span>'))
+            render_card("Pendapatan per unit usaha", rows_html(rows),
+                        foot="Playground memakai POS terpisah, jadi tampil sebagai satu baris.")
 
-        # Tenant breakdown including playground
-        if not fnb_empty:
-            ta = df_fnb.groupby("tenant_name")["nett_sales"].sum().reset_index()
-            ta.columns = ["Tenant","Revenue"]
+    with t[1]:
+        d_fnb = (df_fnb.groupby(df_fnb["sales_date"].dt.date)["nett_sales"].sum()
+                 if not fnb_empty else pd.Series(dtype=float))
+        d_pg = (df_pg.groupby(df_pg["sales_date"].dt.date)["nett_sales"].sum()
+                if not pg_empty else pd.Series(dtype=float))
+        idx = sorted(set(d_fnb.index) | set(d_pg.index))
+        if not idx:
+            st.info("Tidak ada data pada rentang ini.")
         else:
-            ta = pd.DataFrame(columns=["Tenant","Revenue"])
-        if not pg_empty:
-            pg_row = pd.DataFrame([{"Tenant":"🎪 Playground TnT","Revenue":pg_amount}])
-            ta = pd.concat([ta, pg_row], ignore_index=True)
-        ta = ta.sort_values("Revenue",ascending=False)
-        fig_all = px.bar(ta,x="Tenant",y="Revenue",title="Revenue All Units",
-                         text="Revenue",color_discrete_sequence=CHART_PALETTE+["#1A6B3F"],**PLT)
-        fig_all.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=12)
-        fig_all.update_layout(height=520,showlegend=False)
-        show_chart(fig_all, use_container_width=True)
+            f_v = [float(d_fnb.get(i, 0)) for i in idx]
+            p_v = [float(d_pg.get(i, 0)) for i in idx]
+            if True:
+                st.markdown('<div class="chart-title">Pendapatan harian</div>',
+                            unsafe_allow_html=True)
+                fig = go.Figure()
+                fig.add_bar(x=idx, y=f_v, name="F&B", marker_color=C_FNB,
+                            hovertemplate="%{x|%d %b}<br>F&B Rp %{y:,.0f}<extra></extra>")
+                fig.add_bar(x=idx, y=p_v, name="Playground", marker_color=C_PG,
+                            hovertemplate="%{x|%d %b}<br>Playground Rp %{y:,.0f}<extra></extra>")
+                fig.update_layout(barmode="stack", height=300,
+                                  margin=dict(t=10, b=34, l=56, r=14))
+                show_chart(fig)
+            if True:
+                st.markdown('<div class="chart-title">Tren gabungan</div>',
+                            unsafe_allow_html=True)
+                fig = go.Figure()
+                fig.add_scatter(x=idx, y=[a + b for a, b in zip(f_v, p_v)], name="Total",
+                                mode="lines", line=dict(color=GREEN_D, width=2.5),
+                                fill="tozeroy", fillcolor="rgba(16,61,40,.08)",
+                                hovertemplate="%{x|%d %b}<br>Rp %{y:,.0f}<extra></extra>")
+                fig.update_layout(height=260, margin=dict(t=10, b=34, l=56, r=14),
+                                  showlegend=False)
+                show_chart(fig)
 
-    # TAB 2: DAILY COMPARISON
-    with tab2:
-        daily_fnb = df_fnb.groupby(df_fnb["sales_date"].dt.date)["nett_sales"].sum().reset_index() if not fnb_empty else pd.DataFrame(columns=["sales_date","nett_sales"])
-        daily_fnb.columns = ["date","F&B"]
-        daily_pg = df_pg.groupby(df_pg["sales_date"].dt.date)["amount"].sum().reset_index() if not pg_empty else pd.DataFrame(columns=["sales_date","amount"])
-        daily_pg.columns = ["date","Playground"]
-        merged = pd.merge(daily_fnb, daily_pg, on="date", how="outer").fillna(0).sort_values("date")
-        merged["Total"] = merged["F&B"] + merged["Playground"]
+    with t[2]:
+        m_fnb = (df_fnb.groupby(df_fnb["sales_date"].dt.to_period("M").astype(str))["nett_sales"].sum()
+                 if not fnb_empty else pd.Series(dtype=float))
+        m_pg = (df_pg.groupby(df_pg["sales_date"].dt.to_period("M").astype(str))["nett_sales"].sum()
+                if not pg_empty else pd.Series(dtype=float))
+        months = sorted(set(m_fnb.index) | set(m_pg.index))
+        if not months:
+            st.info("Tidak ada data pada rentang ini.")
+        else:
+            f_v = [float(m_fnb.get(m, 0)) for m in months]
+            p_v = [float(m_pg.get(m, 0)) for m in months]
+            if True:
+                st.markdown('<div class="chart-title">Pendapatan per bulan</div>',
+                            unsafe_allow_html=True)
+                fig = go.Figure()
+                fig.add_bar(x=months, y=f_v, name="F&B", marker_color=C_FNB,
+                            hovertemplate="%{x}<br>F&B Rp %{y:,.0f}<extra></extra>")
+                fig.add_bar(x=months, y=p_v, name="Playground", marker_color=C_PG,
+                            hovertemplate="%{x}<br>Playground Rp %{y:,.0f}<extra></extra>")
+                fig.update_layout(barmode="group", height=300, bargap=.3,
+                                  margin=dict(t=10, b=34, l=56, r=14))
+                show_chart(fig)
+            tbl = pd.DataFrame({"Bulan": months, "F&B (Rp)": f_v, "Playground (Rp)": p_v,
+                                "Total (Rp)": [a + b for a, b in zip(f_v, p_v)]})
+            st.markdown('<div class="chart-title">Ringkasan bulanan</div>', unsafe_allow_html=True)
+            st.dataframe(tbl, use_container_width=True, hide_index=True,
+                column_config={
+                    "F&B (Rp)":        st.column_config.NumberColumn(format="localized"),
+                    "Playground (Rp)": st.column_config.NumberColumn(format="localized"),
+                    "Total (Rp)":      st.column_config.NumberColumn(format="localized"),
+                })
 
-        fig_dl = go.Figure()
-        fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",marker_color="#1A6B3F"))
-        fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",marker_color="#1A6B3F"))
-        fig_dl.update_layout(title="Daily Revenue — F&B vs Playground",barmode="stack",height=520,**PLT)
-        show_chart(fig_dl, use_container_width=True)
-
-        fig_ln = go.Figure()
-        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",line=dict(color="#1A6B3F",width=2.5)))
-        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",line=dict(color="#1A6B3F",width=2.5)))
-        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Total"],name="Total",line=dict(color="#C08A2C",width=3,dash="dash")))
-        fig_ln.update_layout(title="Daily Revenue Trend Comparison",height=520,**PLT)
-        show_chart(fig_ln, use_container_width=True)
-
-    # TAB 3: MONTHLY COMPARISON
-    with tab3:
-        mt_fnb = df_fnb.groupby(df_fnb["sales_date"].dt.to_period("M").astype(str))["nett_sales"].sum().reset_index() if not fnb_empty else pd.DataFrame(columns=["sales_date","nett_sales"])
-        mt_fnb.columns = ["month","F&B"]
-        mt_pg = df_pg.groupby(df_pg["sales_date"].dt.to_period("M").astype(str))["amount"].sum().reset_index() if not pg_empty else pd.DataFrame(columns=["sales_date","amount"])
-        mt_pg.columns = ["month","Playground"]
-        mt_merged = pd.merge(mt_fnb, mt_pg, on="month", how="outer").fillna(0).sort_values("month")
-        mt_merged["Grand Total"] = mt_merged["F&B"] + mt_merged["Playground"]
-
-        fig_mb = go.Figure()
-        fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["F&B"],name="F&B",marker_color="#1A6B3F"))
-        fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["Playground"],name="Playground",marker_color="#1A6B3F"))
-        fig_mb.update_layout(title="Monthly Revenue — F&B vs Playground",barmode="group",height=520,**PLT)
-        show_chart(fig_mb, use_container_width=True)
-
-        st.subheader("📋 Ringkasan Bulanan")
-        mt_merged_display = mt_merged.copy()
-        for col in ["F&B","Playground","Grand Total"]:
-            mt_merged_display[col] = mt_merged_display[col].apply(lambda x: f"Rp {x:,.0f}")
-        mt_merged_display.columns = ["Bulan","F&B Sales","Playground Revenue","Grand Total"]
-        st.dataframe(mt_merged_display, use_container_width=True, hide_index=True)
-
-    # Export section (outside tabs)
-    st.divider()
-    st.markdown("**📥 Export Master Report**")
-    me1,me2,me3,me4 = st.columns(4)
-    ds = dr[0] if isinstance(dr,tuple) and len(dr)==2 else date.today()-timedelta(days=30)
-    de = dr[1] if isinstance(dr,tuple) and len(dr)==2 else date.today()
-    with me1:
-        m_html = generate_master_html(df_fnb, df_pg, ds, de)
-        st.download_button("\U0001f5a8\ufe0f Print / Save as PDF", m_html,
-                           f"GROVE_Master_{date.today().strftime('%Y%m%d')}.html","text/html",use_container_width=True)
-    with me2:
-        m_xlsx = generate_master_xlsx(df_fnb, df_pg, ds, de)
-        st.download_button("\U0001f4ca Download Dashboard (XLSX)", m_xlsx,
-                           f"GROVE_Master_{date.today().strftime('%Y%m%d')}.xlsx",
-                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
-    with me3:
-        raw_parts = []
-        if not fnb_empty:
-            fnb_exp = df_fnb.copy(); fnb_exp["source"] = "F&B"
-            raw_parts.append(fnb_exp[["source","tenant_name","sales_date","pax_total","subtotal","discount_total","nett_sales"]])
-        if not pg_empty:
-            pg_exp = df_pg.copy(); pg_exp["source"] = "Playground"; pg_exp["tenant_name"] = "Playground TnT"
-            pg_exp = pg_exp.rename(columns={"amount":"subtotal","child_total":"pax_total"})
-            pg_exp["discount_total"] = 0
-            raw_parts.append(pg_exp[["source","tenant_name","sales_date","pax_total","subtotal","discount_total","nett_sales"]])
-        if raw_parts:
-            raw_all = pd.concat(raw_parts, ignore_index=True)
-            csv_raw = raw_all.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Download Raw Data (CSV)",csv_raw,"grove_master_raw.csv","text/csv",use_container_width=True)
-    with me4:
-        sum_data = {"Segment":["F&B Tenants","Playground TnT","GRAND TOTAL"],
-                    "Revenue":[fnb_nett,pg_amount,grand_total],
-                    "Pax/Anak":[fnb_pax,pg_child,fnb_pax+pg_child]}
-        csv_s = pd.DataFrame(sum_data).to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ Download Summary (CSV)",csv_s,"grove_master_summary.csv","text/csv",use_container_width=True)
+    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="chart-title">Ekspor</div>', unsafe_allow_html=True)
+    ec = st.columns(4)
+    s_, e_ = dr[0], dr[1]
+    with ec[0]:
+        st.download_button("🖨️ Print / PDF", generate_master_html(df_fnb, df_pg, s_, e_),
+                           f"grove_master_{s_}_{e_}.html", "text/html", use_container_width=True)
+    with ec[1]:
+        st.download_button("📊 XLSX", generate_master_xlsx(df_fnb, df_pg, s_, e_),
+                           f"grove_master_{s_}_{e_}.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True)
+    with ec[2]:
+        raw = pd.concat([df_fnb.assign(sumber="F&B"), df_pg.assign(sumber="Playground")],
+                        ignore_index=True) if not (fnb_empty or pg_empty) else (
+              df_fnb.assign(sumber="F&B") if not fnb_empty else df_pg.assign(sumber="Playground"))
+        st.download_button("⬇️ Data mentah (CSV)", raw.to_csv(index=False).encode(),
+                           "grove_master_raw.csv", "text/csv", use_container_width=True)
+    with ec[3]:
+        summ = pd.DataFrame({"segmen": ["F&B", "Playground"], "nett_sales": [fnb_nett, pg_nett]})
+        st.download_button("⬇️ Ringkasan (CSV)", summ.to_csv(index=False).encode(),
+                           "grove_master_summary.csv", "text/csv", use_container_width=True)
 
 
-# ============================================================================
-# MAIN
-# ============================================================================
-@st.cache_resource
 def get_db():
     return SupabaseDB()
 
