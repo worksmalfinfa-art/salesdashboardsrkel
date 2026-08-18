@@ -28,9 +28,16 @@ pio.templates["grove"] = go.layout.Template(
                   size=12, color="#4A524D"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        barcornerradius=8,
-        margin=dict(t=26, b=34, l=46, r=14),
-        title=dict(font=dict(size=13.5, color="#131715"), x=0, xanchor="left"),
+        # A share of the bar width, not a fixed pixel count: 8px turned the thin
+        # bars of a 30-day series into capsules while leaving wide bars barely
+        # rounded. A percentage behaves at both extremes.
+        barcornerradius="22%",
+        # The title owns the top margin, the legend the bottom one. Both used to
+        # sit at x=0 directly above the plot, so any chart with a legend drew
+        # its title straight through the swatches.
+        margin=dict(t=58, b=48, l=54, r=18),
+        title=dict(font=dict(size=13.5, color="#131715"), x=0, xanchor="left",
+                   y=0.98, yanchor="top"),
         xaxis=dict(showgrid=False, zeroline=False, linecolor="#EBECE8",
                    tickfont=dict(size=11, color="#8B948D"),
                    title=dict(font=dict(size=11, color="#8B948D"))),
@@ -38,8 +45,14 @@ pio.templates["grove"] = go.layout.Template(
                    linecolor="rgba(0,0,0,0)",
                    tickfont=dict(size=11, color="#8B948D"),
                    title=dict(font=dict(size=11, color="#8B948D"))),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
-                    font=dict(size=11), bgcolor="rgba(0,0,0,0)"),
+        # Title left, legend right, both in the top margin. Separating them
+        # horizontally rather than vertically is what keeps them apart at any
+        # chart height -- legend y is a fraction of the plot area, so a bottom
+        # legend that clears the axis on a 300px chart is pushed past the
+        # margin and clipped on a 500px one.
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=1, xanchor="right",
+                    font=dict(size=11), bgcolor="rgba(0,0,0,0)",
+                    itemsizing="constant"),
         hoverlabel=dict(bgcolor="#131715", bordercolor="#131715",
                         font=dict(size=12, color="#FFFFFF",
                                   family="ui-rounded, Segoe UI, system-ui, sans-serif")),
