@@ -16,16 +16,33 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 # Set global plotly font size
+# Every chart in the app inherits this. Transparent ground so a chart sits on
+# its card instead of on a white slab of its own; horizontal hairlines only,
+# since vertical rules add nothing to a time series; rounded bar caps to match
+# the card system; and muted axis type so the data outranks the furniture.
 pio.templates["grove"] = go.layout.Template(
     layout=go.Layout(
-        font=dict(family="Plus Jakarta Sans", size=16),
-        title_font_size=20,
-        legend_font_size=14,
-        margin=dict(t=60, b=60, l=60, r=30),
-        hoverlabel=dict(
-            font_size=14,
-            font_family="Plus Jakarta Sans",
-        ),
+        colorway=["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E",
+                  "#7A5230", "#2E9160", "#9E6B4A"],
+        font=dict(family="ui-rounded, Segoe UI, system-ui, sans-serif",
+                  size=12, color="#4A524D"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        barcornerradius=8,
+        margin=dict(t=26, b=34, l=46, r=14),
+        title=dict(font=dict(size=13.5, color="#131715"), x=0, xanchor="left"),
+        xaxis=dict(showgrid=False, zeroline=False, linecolor="#EBECE8",
+                   tickfont=dict(size=11, color="#8B948D"),
+                   title=dict(font=dict(size=11, color="#8B948D"))),
+        yaxis=dict(showgrid=True, gridcolor="#F1F2EF", zeroline=False,
+                   linecolor="rgba(0,0,0,0)",
+                   tickfont=dict(size=11, color="#8B948D"),
+                   title=dict(font=dict(size=11, color="#8B948D"))),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
+                    font=dict(size=11), bgcolor="rgba(0,0,0,0)"),
+        hoverlabel=dict(bgcolor="#131715", bordercolor="#131715",
+                        font=dict(size=12, color="#FFFFFF",
+                                  family="ui-rounded, Segoe UI, system-ui, sans-serif")),
         hovermode="closest",
     ))
 pio.templates.default = "plotly_white+grove"
@@ -59,11 +76,15 @@ ESB_COL_MAP = {
 }
 
 COLORS = {
-    "primary": "#1B4332", "secondary": "#2D6A4F", "accent": "#52B788",
-    "gold": "#D4A843", "dark": "#0B1D14", "light": "#D8F3DC",
-    "red": "#E63946", "blue": "#457B9D", "orange": "#E76F51", "white": "#FFFFFF",
+    "primary": "#103D28", "secondary": "#1A6B3F", "accent": "#2E9160",
+    "gold": "#C08A2C", "dark": "#0B140F", "light": "#DCEEE4",
+    "red": "#C0483C", "blue": "#3B4C7A", "orange": "#9E6B4A", "white": "#FFFFFF",
 }
-CHART_PALETTE = ["#2D6A4F","#52B788","#D4A843","#457B9D","#E76F51","#E63946","#6A4C93","#1B4332"]
+# One palette, defined once. Charts and tenant marks draw from the same list
+# so a brand keeps its hue whether it appears as a bar, a line or a square.
+TENANT_HUES = ["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E", "#7A5230",
+               "#2E9160", "#9E6B4A", "#4A6B7B", "#7B4A6B"]
+CHART_PALETTE = TENANT_HUES
 
 ALLOWED_DOMAINS = ["srkel.id", "teamup.id"]
 
@@ -640,10 +661,6 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 
-# Fixed hue per tenant. Colour means WHO, so the same brand keeps its mark in
-# every list and every chart, and a chart needs no legend to be read.
-TENANT_HUES = ["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E", "#7A5230",
-               "#2E9160", "#9E6B4A", "#4A6B7B", "#7B4A6B"]
 
 
 def tenant_hue(tenant_id, name=""):
@@ -966,7 +983,7 @@ def clean_hover(fig, value_fmt=",.0f", prefix="", suffix=""):
         trace.hovertemplate = tpl
     return fig
 
-PLT_FONT = dict(font=dict(family="Plus Jakarta Sans", size=14))
+PLT_FONT = dict(font=dict(family="ui-rounded, Segoe UI, system-ui, sans-serif", size=12))
 
 
 # ============================================================================
@@ -1346,8 +1363,11 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     disc_pct = t_disc / t_sub * 100 if t_sub else 0
 
     chart_h = 500
-    chart_layout = dict(template="plotly_white", font=dict(family="Arial", size=14),
-                        title_font_size=18, margin=dict(t=50,b=50,l=60,r=30), height=chart_h)
+    chart_layout = dict(
+        font=dict(family="ui-rounded, Segoe UI, system-ui, sans-serif",
+                  size=13, color="#4A524D"),
+        title_font=dict(size=16, color="#131715"),
+        margin=dict(t=44, b=44, l=58, r=24), height=chart_h)
 
     charts_html = []
 
@@ -1373,9 +1393,9 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     daily = df.groupby("date_only").agg(nett=("nett_sales","sum"), pax=("pax_total","sum")).reset_index()
     fig1 = make_subplots(specs=[[{"secondary_y":True}]])
     fig1.add_trace(go.Bar(x=daily["date_only"].astype(str), y=daily["nett"], name="Nett Sales",
-                          marker_color="#2D6A4F", opacity=0.85), secondary_y=False)
+                          marker_color="#1A6B3F", opacity=0.85), secondary_y=False)
     fig1.add_trace(go.Scatter(x=daily["date_only"].astype(str), y=daily["pax"], name="Pax",
-                              mode="lines+markers", line=dict(color="#D4A843",width=2.5)), secondary_y=True)
+                              mode="lines+markers", line=dict(color="#C08A2C",width=2.5)), secondary_y=True)
     fig1.update_layout(title="Daily Sales & Pax Trend", hovermode="x unified", **chart_layout)
     fig1.update_yaxes(title_text="Nett Sales (Rp)", secondary_y=False)
     fig1.update_yaxes(title_text="Pax", secondary_y=True)
@@ -1385,7 +1405,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     wd = df.groupby("weekday")["nett_sales"].mean().reindex(wd_order).fillna(0).reset_index()
     wd.columns = ["Day","Avg"]
     fig_wd = px.bar(wd, x="Day", y="Avg", title="Rata-rata Sales per Hari",
-                    color="Avg", color_continuous_scale=["#D8F3DC","#1B4332"], template="plotly_white",
+                    color="Avg", color_continuous_scale=["#DCEEE4","#103D28"],
                     labels={"Day":"Hari","Avg":"Avg Sales (Rp)"})
     fig_wd.update_layout(showlegend=False, coloraxis_showscale=False, **chart_layout)
     add_chart(fig_wd)
@@ -1395,8 +1415,8 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     hr_wd["lbl"] = hr_wd["hr"].apply(lambda x: f"{x:02d}:00")
     fig_h = px.bar(hr_wd, x="lbl", y="pax_total", color="day_type", barmode="group",
                    title="Transaction per Hour — Weekday vs Weekend",
-                   color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
-                   text="pax_total", labels={"lbl":"Jam","pax_total":"Pax","day_type":""}, template="plotly_white")
+                   color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
+                   text="pax_total", labels={"lbl":"Jam","pax_total":"Pax","day_type":""})
     fig_h.update_traces(textposition="outside", textfont_size=11)
     fig_h.update_layout(**chart_layout)
     add_chart(fig_h, "2. Analisis Per Jam")
@@ -1404,15 +1424,15 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     traffic = df.groupby("day_type").agg(pax=("pax_total","sum"), sales=("nett_sales","sum")).reset_index()
     fig_trf = px.bar(traffic, x="day_type", y=["pax","sales"], barmode="group",
                      title="Tenant Traffic & Sales — Weekday vs Weekend",
-                     labels={"day_type":"","value":"","variable":""}, template="plotly_white")
+                     labels={"day_type":"","value":"","variable":""})
     fig_trf.update_layout(**chart_layout)
     add_chart(fig_trf)
 
     hm = df.groupby(["weekday","hr"])["nett_sales"].sum().reset_index()
     hm_piv = hm.pivot(index="weekday", columns="hr", values="nett_sales").fillna(0).reindex(wd_order)
     fig_hm = px.imshow(hm_piv, aspect="auto", title="Heatmap: Hari × Jam",
-                       color_continuous_scale=["#D8F3DC","#1B4332"],
-                       labels=dict(x="Jam",y="Hari",color="Sales (Rp)"), template="plotly_white")
+                       color_continuous_scale=["#DCEEE4","#103D28"],
+                       labels=dict(x="Jam",y="Hari",color="Sales (Rp)"))
     fig_hm.update_layout(**chart_layout)
     add_chart(fig_hm)
 
@@ -1421,20 +1441,20 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
         ta = df.groupby("tenant_name")["nett_sales"].sum().reset_index().sort_values("nett_sales",ascending=False)
         fig_tb = px.bar(ta, x="tenant_name", y="nett_sales", title="Total Sales per Tenant",
                         color="tenant_name", color_discrete_sequence=CHART_PALETTE, text="nett_sales",
-                        labels={"tenant_name":"Tenant","nett_sales":"Nett Sales (Rp)"}, template="plotly_white")
+                        labels={"tenant_name":"Tenant","nett_sales":"Nett Sales (Rp)"})
         fig_tb.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=12)
         fig_tb.update_layout(showlegend=False, **chart_layout)
         add_chart(fig_tb, "3. Perbandingan Tenant")
 
         fig_pie = px.pie(ta, values="nett_sales", names="tenant_name", title="Kontribusi Sales per Tenant",
-                         color_discrete_sequence=CHART_PALETTE, hole=0.4, template="plotly_white")
+                         color_discrete_sequence=CHART_PALETTE, hole=0.4)
         fig_pie.update_layout(**chart_layout)
         add_chart(fig_pie)
 
         td = df.groupby(["date_only","tenant_name"])["nett_sales"].sum().reset_index()
         fig_td = px.line(td, x="date_only", y="nett_sales", color="tenant_name",
                          title="Daily Trend per Tenant", color_discrete_sequence=CHART_PALETTE,
-                         labels={"date_only":"Tanggal","nett_sales":"Nett Sales (Rp)","tenant_name":"Tenant"}, template="plotly_white")
+                         labels={"date_only":"Tanggal","nett_sales":"Nett Sales (Rp)","tenant_name":"Tenant"})
         fig_td.update_layout(**chart_layout)
         add_chart(fig_td)
 
@@ -1445,9 +1465,9 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
         seg_order = ["Breakfast","Lunch","After Office"]
         fig_seg = px.bar(seg_pax, x="segment", y="pax_total", color="day_type", barmode="group",
                          title="Pax by Time Segment — Weekday vs Weekend",
-                         color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                         color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                          text="pax_total", category_orders={"segment":seg_order},
-                         labels={"segment":"Segment","pax_total":"Pax","day_type":""}, template="plotly_white")
+                         labels={"segment":"Segment","pax_total":"Pax","day_type":""})
         fig_seg.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=13)
         fig_seg.update_layout(**chart_layout)
         add_chart(fig_seg, "4. Time Segment")
@@ -1455,9 +1475,9 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
         seg_sales = seg_df2.groupby(["segment","day_type"])["nett_sales"].sum().reset_index()
         fig_ss = px.bar(seg_sales, x="segment", y="nett_sales", color="day_type", barmode="group",
                         title="Sales by Time Segment — Weekday vs Weekend",
-                        color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                        color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                         text="nett_sales", category_orders={"segment":seg_order},
-                        labels={"segment":"Segment","nett_sales":"Sales (Rp)","day_type":""}, template="plotly_white")
+                        labels={"segment":"Segment","nett_sales":"Sales (Rp)","day_type":""})
         fig_ss.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=12)
         fig_ss.update_layout(**chart_layout)
         add_chart(fig_ss)
@@ -1466,8 +1486,8 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     wk = df.groupby(["tenant_name","week_label"])["nett_sales"].sum().reset_index()
     fig_wk = px.bar(wk, x="tenant_name", y="nett_sales", color="week_label", barmode="group",
                     title="Tenant Sales per Week", text="nett_sales",
-                    color_discrete_sequence=["#8B0000","#CC3333","#DAA520","#B8860B","#457B9D"],
-                    labels={"tenant_name":"Tenant","nett_sales":"Sales (Rp)","week_label":""}, template="plotly_white")
+                    color_discrete_sequence=["#8A3730","#CC3333","#DAA520","#B8860B","#3B4C7A"],
+                    labels={"tenant_name":"Tenant","nett_sales":"Sales (Rp)","week_label":""})
     fig_wk.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=10)
     fig_wk.update_layout(**{**chart_layout, "height": 550})
     add_chart(fig_wk, "5. Weekly Report")
@@ -1486,7 +1506,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
             day_chart = pd.DataFrame({"Hari":[day_map.get(d,d) for d in day_order], "Sales":ds.values})
             fig_d = px.bar(day_chart, x="Hari", y="Sales", title=f"{tn} — {last_week} (Avg: Rp {avg_val:,.0f})",
                            text="Sales", color_discrete_sequence=["#6495ED"],
-                           labels={"Hari":"Hari","Sales":"Sales (Rp)"}, template="plotly_white")
+                           labels={"Hari":"Hari","Sales":"Sales (Rp)"})
             fig_d.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=11)
             fig_d.update_layout(**{**chart_layout, "height": 400})
             add_chart(fig_d)
@@ -1494,15 +1514,15 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     # --- 6. MONTHLY OVERVIEW ---
     mt_tot = df.groupby("month").agg(pax=("pax_total","sum"), sales=("nett_sales","sum")).reset_index().sort_values("month")
     fig_mt = px.bar(mt_tot, x="month", y="sales", title="Total Nett Sales per Bulan",
-                    text="sales", color_discrete_sequence=["#8B0000"],
-                    labels={"month":"Bulan","sales":"Nett Sales (Rp)"}, template="plotly_white")
+                    text="sales", color_discrete_sequence=["#8A3730"],
+                    labels={"month":"Bulan","sales":"Nett Sales (Rp)"})
     fig_mt.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
     fig_mt.update_layout(**chart_layout)
     add_chart(fig_mt, "6. Monthly Overview")
 
     fig_mp = px.bar(mt_tot, x="month", y="pax", title="Total Pax per Bulan",
-                    text="pax", color_discrete_sequence=["#2D6A4F"],
-                    labels={"month":"Bulan","pax":"Jumlah Pax"}, template="plotly_white")
+                    text="pax", color_discrete_sequence=["#1A6B3F"],
+                    labels={"month":"Bulan","pax":"Jumlah Pax"})
     fig_mp.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=13)
     fig_mp.update_layout(**chart_layout)
     add_chart(fig_mp)
@@ -1514,18 +1534,18 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     dma["MA_14"] = dma["Sales"].rolling(14,min_periods=1).mean()
     fig_ma = go.Figure()
     fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str), y=dma["Sales"], name="Daily",
-                                mode="lines", line=dict(color="#D8F3DC",width=1)))
+                                mode="lines", line=dict(color="#DCEEE4",width=1)))
     fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str), y=dma["MA_7"], name="MA 7-day",
-                                mode="lines", line=dict(color="#52B788",width=2.5)))
+                                mode="lines", line=dict(color="#2E9160",width=2.5)))
     fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str), y=dma["MA_14"], name="MA 14-day",
-                                mode="lines", line=dict(color="#1B4332",width=2.5)))
+                                mode="lines", line=dict(color="#103D28",width=2.5)))
     fig_ma.update_layout(title="Moving Average Analysis", xaxis_title="Tanggal", yaxis_title="Sales (Rp)", **chart_layout)
     add_chart(fig_ma, "7. Deep Dive")
 
     dd2 = df.groupby("date_only").agg(disc=("discount_total","sum"),sales=("nett_sales","sum"),pax=("pax_total","sum")).reset_index()
     fig_dsc = px.scatter(dd2, x="disc", y="sales", size="pax", title="Discount vs Sales Impact",
-                         color="pax", color_continuous_scale=["#D8F3DC","#1B4332"],
-                         labels={"disc":"Discount (Rp)","sales":"Sales (Rp)","pax":"Pax"}, template="plotly_white")
+                         color="pax", color_continuous_scale=["#DCEEE4","#103D28"],
+                         labels={"disc":"Discount (Rp)","sales":"Sales (Rp)","pax":"Pax"})
     fig_dsc.update_layout(**chart_layout)
     add_chart(fig_dsc)
 
@@ -1552,10 +1572,10 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-* {{ font-family: 'Plus Jakarta Sans', Arial, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }}
+* {{ font-family: ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ background: #fff; padding: 30px 40px; color: #333; max-width: 1100px; margin: 0 auto; }}
 .report-header {{
-    background: linear-gradient(135deg, #1B4332, #2D6A4F, #52B788);
+    background: linear-gradient(135deg, #103D28, #1A6B3F, #2E9160);
     color: white; padding: 24px 32px; border-radius: 12px; margin-bottom: 24px;
 }}
 .report-header h1 {{ font-size: 28px; font-weight: 800; margin-bottom: 4px; }}
@@ -1563,31 +1583,31 @@ body {{ background: #fff; padding: 30px 40px; color: #333; max-width: 1100px; ma
 .kpi-row {{ display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }}
 .kpi {{
     flex: 1; min-width: 160px; background: #fff; border-radius: 10px; padding: 16px;
-    border-left: 5px solid #2D6A4F; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    border-left: 5px solid #1A6B3F; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }}
-.kpi.gold {{ border-left-color: #D4A843; }}
-.kpi.blue {{ border-left-color: #457B9D; }}
-.kpi.red {{ border-left-color: #E63946; }}
-.kpi.orange {{ border-left-color: #E76F51; }}
+.kpi.gold {{ border-left-color: #C08A2C; }}
+.kpi.blue {{ border-left-color: #3B4C7A; }}
+.kpi.red {{ border-left-color: #C0483C; }}
+.kpi.orange {{ border-left-color: #9E6B4A; }}
 .kpi-label {{ font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }}
-.kpi-value {{ font-size: 22px; font-weight: 800; color: #1B4332; margin-top: 4px; }}
+.kpi-value {{ font-size: 22px; font-weight: 800; color: #103D28; margin-top: 4px; }}
 .section-title {{
-    font-size: 20px; font-weight: 700; color: #1B4332;
-    border-bottom: 3px solid #52B788; padding-bottom: 6px;
+    font-size: 20px; font-weight: 700; color: #103D28;
+    border-bottom: 3px solid #2E9160; padding-bottom: 6px;
     margin: 32px 0 16px;
 }}
 table {{ width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }}
-th {{ background: #1B4332; color: white; padding: 10px 12px; text-align: left; }}
+th {{ background: #103D28; color: white; padding: 10px 12px; text-align: left; }}
 td {{ padding: 8px 12px; border-bottom: 1px solid #eee; }}
 tr:nth-child(even) {{ background: #f9f9f9; }}
 .page-break {{ page-break-after: auto; }}
 .print-btn {{
     position: fixed; top: 16px; right: 16px; z-index: 999;
-    background: #2D6A4F; color: white; border: none; padding: 12px 24px;
+    background: #1A6B3F; color: white; border: none; padding: 12px 24px;
     border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }}
-.print-btn:hover {{ background: #1B4332; }}
+.print-btn:hover {{ background: #103D28; }}
 @media print {{
     .print-btn {{ display: none; }}
     body {{ padding: 10px; }}
@@ -1798,7 +1818,7 @@ def generate_playground_html(df, date_start, date_end):
     df["week_label"]="Week "+df["sales_date"].apply(lambda d:str((d.day-1)//7+1))
     df["month"]=df["sales_date"].dt.to_period("M").astype(str)
 
-    cl = dict(template="plotly_white",font=dict(family="Arial",size=14),title_font_size=18,
+    cl = dict(font=dict(family="ui-rounded, Segoe UI, system-ui, sans-serif",size=13),title_font_size=16,
               margin=dict(t=50,b=50,l=60,r=30),height=500)
     parts = []
 
@@ -1809,7 +1829,7 @@ def generate_playground_html(df, date_start, date_end):
 
     parts.append(f"""
     <div class="kpi-row">
-        <div class="kpi" style="border-left-color:#6A4C93"><div class="kpi-label">Total Revenue</div><div class="kpi-value">Rp {t_amt:,.0f}</div></div>
+        <div class="kpi" style="border-left-color:#1A6B3F"><div class="kpi-label">Total Revenue</div><div class="kpi-value">Rp {t_amt:,.0f}</div></div>
         <div class="kpi gold"><div class="kpi-label">Transaksi</div><div class="kpi-value">{t_trx:,}</div></div>
         <div class="kpi blue"><div class="kpi-label">Total Anak</div><div class="kpi-value">{t_child:,}</div></div>
         <div class="kpi orange"><div class="kpi-label">Total Pendamping</div><div class="kpi-value">{t_comp:,}</div></div>
@@ -1819,37 +1839,37 @@ def generate_playground_html(df, date_start, date_end):
     # Trend
     daily=df.groupby("date_only").agg(amt=("amount","sum"),trx=("amount","count"),ch=("child_total","sum")).reset_index()
     f1=make_subplots(specs=[[{"secondary_y":True}]])
-    f1.add_trace(go.Bar(x=daily["date_only"].astype(str),y=daily["amt"],name="Revenue",marker_color="#6A4C93",opacity=0.85),secondary_y=False)
-    f1.add_trace(go.Scatter(x=daily["date_only"].astype(str),y=daily["trx"],name="Transaksi",mode="lines+markers",line=dict(color="#D4A843",width=2.5)),secondary_y=True)
+    f1.add_trace(go.Bar(x=daily["date_only"].astype(str),y=daily["amt"],name="Revenue",marker_color="#1A6B3F",opacity=0.85),secondary_y=False)
+    f1.add_trace(go.Scatter(x=daily["date_only"].astype(str),y=daily["trx"],name="Transaksi",mode="lines+markers",line=dict(color="#C08A2C",width=2.5)),secondary_y=True)
     f1.update_layout(title="Daily Revenue & Transaction",**cl);ac(f1,"1. Trend Harian")
 
     # Child vs Companion
     vc=pd.DataFrame({"Tipe":["Anak","Pendamping"],"Jumlah":[t_child,t_comp]})
-    f2=px.pie(vc,values="Jumlah",names="Tipe",title="Komposisi Pengunjung",color_discrete_sequence=["#6A4C93","#D4A843"],hole=0.4,template="plotly_white")
+    f2=px.pie(vc,values="Jumlah",names="Tipe",title="Komposisi Pengunjung",color_discrete_sequence=["#1A6B3F","#C08A2C"],hole=0.4)
     f2.update_layout(**cl);ac(f2,"2. Child & Companion")
 
     dv=df.groupby("date_only").agg(ch=("child_total","sum"),co=("companion_total","sum")).reset_index()
     f3=go.Figure()
-    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["ch"],name="Anak",marker_color="#6A4C93"))
-    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["co"],name="Pendamping",marker_color="#D4A843"))
+    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["ch"],name="Anak",marker_color="#1A6B3F"))
+    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["co"],name="Pendamping",marker_color="#C08A2C"))
     f3.update_layout(title="Daily Child vs Companion",barmode="stack",**cl);ac(f3)
 
     # WD/WE
     trf=df.groupby("day_type").agg(rev=("amount","sum"),ch=("child_total","sum")).reset_index()
     f4=px.bar(trf,x="day_type",y="rev",title="Revenue — Weekday vs Weekend",color="day_type",
-              color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},text="rev",template="plotly_white")
+              color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},text="rev")
     f4.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
     f4.update_layout(showlegend=False,**cl);ac(f4,"3. Weekday vs Weekend")
 
     # Weekly
     wk=df.groupby("week_label").agg(rev=("amount","sum")).reset_index()
-    f5=px.bar(wk,x="week_label",y="rev",title="Revenue per Week",text="rev",color_discrete_sequence=["#6A4C93"],template="plotly_white")
+    f5=px.bar(wk,x="week_label",y="rev",title="Revenue per Week",text="rev",color_discrete_sequence=["#1A6B3F"])
     f5.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
     f5.update_layout(**cl);ac(f5,"4. Weekly Report")
 
     # Monthly
     mt=df.groupby("month").agg(rev=("amount","sum"),ch=("child_total","sum")).reset_index().sort_values("month")
-    f6=px.bar(mt,x="month",y="rev",title="Revenue per Bulan",text="rev",color_discrete_sequence=["#6A4C93"],template="plotly_white")
+    f6=px.bar(mt,x="month",y="rev",title="Revenue per Bulan",text="rev",color_discrete_sequence=["#1A6B3F"])
     f6.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
     f6.update_layout(**cl);ac(f6,"5. Monthly Overview")
 
@@ -1857,9 +1877,9 @@ def generate_playground_html(df, date_start, date_end):
     dma=df.groupby("date_only")["amount"].sum().reset_index();dma.columns=["T","R"];dma=dma.sort_values("T")
     dma["MA7"]=dma["R"].rolling(7,min_periods=1).mean();dma["MA14"]=dma["R"].rolling(14,min_periods=1).mean()
     f7=go.Figure()
-    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["R"],name="Daily",mode="lines",line=dict(color="#E8D5F5",width=1)))
-    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA7"],name="MA 7",mode="lines",line=dict(color="#9B72CF",width=2.5)))
-    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA14"],name="MA 14",mode="lines",line=dict(color="#6A4C93",width=2.5)))
+    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["R"],name="Daily",mode="lines",line=dict(color="#DCEEE4",width=1)))
+    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA7"],name="MA 7",mode="lines",line=dict(color="#2E9160",width=2.5)))
+    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA14"],name="MA 14",mode="lines",line=dict(color="#1A6B3F",width=2.5)))
     f7.update_layout(title="Moving Average Analysis",**cl);ac(f7,"6. Deep Dive")
 
     # Summary table
@@ -1875,20 +1895,20 @@ def generate_playground_html(df, date_start, date_end):
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-*{{font-family:'Plus Jakarta Sans',Arial,sans-serif;margin:0;padding:0;box-sizing:border-box;}}
+*{{font-family:ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif;margin:0;padding:0;box-sizing:border-box;}}
 body{{background:#fff;padding:30px 40px;color:#333;max-width:1100px;margin:0 auto;}}
-.report-header{{background:linear-gradient(135deg,#6A4C93,#9B72CF,#C9A9E9);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
+.report-header{{background:linear-gradient(135deg,#1A6B3F,#2E9160,#C9A9E9);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
 .report-header h1{{font-size:28px;font-weight:800;}}.report-header p{{font-size:14px;opacity:0.85;}}
 .kpi-row{{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;}}
-.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #6A4C93;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
-.kpi.gold{{border-left-color:#D4A843;}}.kpi.blue{{border-left-color:#457B9D;}}.kpi.red{{border-left-color:#E63946;}}.kpi.orange{{border-left-color:#E76F51;}}
+.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #1A6B3F;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
+.kpi.gold{{border-left-color:#C08A2C;}}.kpi.blue{{border-left-color:#3B4C7A;}}.kpi.red{{border-left-color:#C0483C;}}.kpi.orange{{border-left-color:#9E6B4A;}}
 .kpi-label{{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}}
-.kpi-value{{font-size:22px;font-weight:800;color:#6A4C93;margin-top:4px;}}
-.section-title{{font-size:20px;font-weight:700;color:#6A4C93;border-bottom:3px solid #9B72CF;padding-bottom:6px;margin:32px 0 16px;}}
+.kpi-value{{font-size:22px;font-weight:800;color:#1A6B3F;margin-top:4px;}}
+.section-title{{font-size:20px;font-weight:700;color:#1A6B3F;border-bottom:3px solid #2E9160;padding-bottom:6px;margin:32px 0 16px;}}
 table{{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;}}
-th{{background:#6A4C93;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
+th{{background:#1A6B3F;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
 tr:nth-child(even){{background:#f9f9f9;}}.page-break{{page-break-after:auto;}}
-.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#6A4C93;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);}}
+.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#1A6B3F;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);}}
 @media print{{.print-btn{{display:none;}}body{{padding:10px;}}.report-header,.kpi,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}.page-break{{page-break-after:always;}}}}
 </style></head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
@@ -2013,7 +2033,7 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
     fnb_pax=df_fnb["pax_total"].sum() if not df_fnb.empty else 0
     pg_child=df_pg["child_total"].sum() if not df_pg.empty else 0
     grand=fnb_nett+pg_amt
-    cl=dict(template="plotly_white",font=dict(family="Arial",size=14),title_font_size=18,margin=dict(t=50,b=50,l=60,r=30),height=500)
+    cl=dict(font=dict(family="ui-rounded, Segoe UI, system-ui, sans-serif",size=13),title_font_size=16,margin=dict(t=50,b=50,l=60,r=30),height=500)
     parts=[]
     def ac(fig,t=None):
         if t: parts.append(f'<div class="section-title">{t}</div>')
@@ -2024,14 +2044,14 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
     <div class="kpi-row">
         <div class="kpi"><div class="kpi-label">Grand Total Revenue</div><div class="kpi-value">Rp {grand:,.0f}</div></div>
         <div class="kpi gold"><div class="kpi-label">F&B Nett Sales</div><div class="kpi-value">Rp {fnb_nett:,.0f}</div></div>
-        <div class="kpi" style="border-left-color:#6A4C93"><div class="kpi-label">Playground Revenue</div><div class="kpi-value">Rp {pg_amt:,.0f}</div></div>
+        <div class="kpi" style="border-left-color:#1A6B3F"><div class="kpi-label">Playground Revenue</div><div class="kpi-value">Rp {pg_amt:,.0f}</div></div>
         <div class="kpi orange"><div class="kpi-label">F&B Pax</div><div class="kpi-value">{fnb_pax:,}</div></div>
         <div class="kpi red"><div class="kpi-label">Playground Anak</div><div class="kpi-value">{pg_child:,}</div></div>
     </div>""")
 
     # Pie
     ct=pd.DataFrame({"Segment":["F&B Tenants","Playground TnT"],"Revenue":[fnb_nett,pg_amt]})
-    fp=px.pie(ct,values="Revenue",names="Segment",title="Kontribusi Revenue",color_discrete_sequence=["#2D6A4F","#6A4C93"],hole=0.4,template="plotly_white")
+    fp=px.pie(ct,values="Revenue",names="Segment",title="Kontribusi Revenue",color_discrete_sequence=["#1A6B3F","#1A6B3F"],hole=0.4)
     fp.update_layout(**cl);ac(fp,"1. Revenue Overview")
 
     # Daily stacked
@@ -2041,8 +2061,8 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
     d_pg.columns=["date","Playground"]
     mg=pd.merge(d_fnb,d_pg,on="date",how="outer").fillna(0).sort_values("date")
     fd=go.Figure()
-    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["F&B"],name="F&B",marker_color="#2D6A4F"))
-    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["Playground"],name="Playground",marker_color="#6A4C93"))
+    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["F&B"],name="F&B",marker_color="#1A6B3F"))
+    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["Playground"],name="Playground",marker_color="#1A6B3F"))
     fd.update_layout(title="Daily Revenue — F&B vs Playground",barmode="stack",**cl);ac(fd,"2. Daily Comparison")
 
     # Monthly
@@ -2052,8 +2072,8 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
     mt_pg.columns=["month","Playground"]
     mt=pd.merge(mt_fnb,mt_pg,on="month",how="outer").fillna(0).sort_values("month")
     fm=go.Figure()
-    fm.add_trace(go.Bar(x=mt["month"],y=mt["F&B"],name="F&B",marker_color="#2D6A4F"))
-    fm.add_trace(go.Bar(x=mt["month"],y=mt["Playground"],name="Playground",marker_color="#6A4C93"))
+    fm.add_trace(go.Bar(x=mt["month"],y=mt["F&B"],name="F&B",marker_color="#1A6B3F"))
+    fm.add_trace(go.Bar(x=mt["month"],y=mt["Playground"],name="Playground",marker_color="#1A6B3F"))
     fm.update_layout(title="Monthly Revenue — F&B vs Playground",barmode="group",**cl);ac(fm,"3. Monthly Comparison")
 
     # Table
@@ -2069,20 +2089,20 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-*{{font-family:'Plus Jakarta Sans',Arial,sans-serif;margin:0;padding:0;box-sizing:border-box;}}
+*{{font-family:ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif;margin:0;padding:0;box-sizing:border-box;}}
 body{{background:#fff;padding:30px 40px;color:#333;max-width:1100px;margin:0 auto;}}
-.report-header{{background:linear-gradient(135deg,#0B1D14,#1B4332,#D4A843);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
+.report-header{{background:linear-gradient(135deg,#0B140F,#103D28,#C08A2C);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
 .report-header h1{{font-size:28px;font-weight:800;}}.report-header p{{font-size:14px;opacity:0.85;}}
 .kpi-row{{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;}}
-.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #1B4332;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
-.kpi.gold{{border-left-color:#D4A843;}}.kpi.orange{{border-left-color:#E76F51;}}.kpi.red{{border-left-color:#E63946;}}
+.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #103D28;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
+.kpi.gold{{border-left-color:#C08A2C;}}.kpi.orange{{border-left-color:#9E6B4A;}}.kpi.red{{border-left-color:#C0483C;}}
 .kpi-label{{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}}
-.kpi-value{{font-size:22px;font-weight:800;color:#1B4332;margin-top:4px;}}
-.section-title{{font-size:20px;font-weight:700;color:#1B4332;border-bottom:3px solid #D4A843;padding-bottom:6px;margin:32px 0 16px;}}
+.kpi-value{{font-size:22px;font-weight:800;color:#103D28;margin-top:4px;}}
+.section-title{{font-size:20px;font-weight:700;color:#103D28;border-bottom:3px solid #C08A2C;padding-bottom:6px;margin:32px 0 16px;}}
 table{{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;}}
-th{{background:#1B4332;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
+th{{background:#103D28;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
 tr:nth-child(even){{background:#f9f9f9;}}.page-break{{page-break-after:auto;}}
-.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#1B4332;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;}}
+.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#103D28;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;}}
 @media print{{.print-btn{{display:none;}}body{{padding:10px;}}.report-header,.kpi,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}.page-break{{page-break-after:always;}}}}
 </style></head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
@@ -2187,13 +2207,13 @@ def page_dashboard_fnb():
         c1,c2 = st.columns(2)
         with c1:
             fig_w = px.bar(wd, x="weekday", y="avg_s", title="Rata-rata sales per hari",
-                           color="avg_s", color_continuous_scale=["#D8F3DC","#1B4332"], **PLT)
+                           color="avg_s", color_continuous_scale=["#DCEEE4","#103D28"], **PLT)
             fig_w.update_layout(height=460, showlegend=False, coloraxis_showscale=False)
             clean_hover(fig_w, prefix='Rp ')
             st.plotly_chart(fig_w, use_container_width=True)
         with c2:
             fig_w2 = px.bar(wd, x="weekday", y="avg_p", title="Rata-rata pax per hari",
-                            color="avg_p", color_continuous_scale=["#FFF3CD","#D4A843"], **PLT)
+                            color="avg_p", color_continuous_scale=["#FFF3CD","#C08A2C"], **PLT)
             fig_w2.update_layout(height=460, showlegend=False, coloraxis_showscale=False)
             clean_hover(fig_w2, suffix=' pax')
             st.plotly_chart(fig_w2, use_container_width=True)
@@ -2205,7 +2225,7 @@ def page_dashboard_fnb():
             traffic = df.groupby("day_type")["pax_total"].sum().reset_index()
             traffic.columns = ["Day Type", "Pax"]
             fig_tr = px.bar(traffic, x="Day Type", y="Pax", title="Tenant traffic \u2014 Weekday vs Weekend",
-                            color="Day Type", color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                            color="Day Type", color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                             text="Pax", **PLT)
             fig_tr.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
             fig_tr.update_layout(height=460, showlegend=False)
@@ -2215,7 +2235,7 @@ def page_dashboard_fnb():
             traffic_s = df.groupby("day_type")["nett_sales"].sum().reset_index()
             traffic_s.columns = ["Day Type", "Sales"]
             fig_ts = px.bar(traffic_s, x="Day Type", y="Sales", title="Total sales \u2014 Weekday vs Weekend",
-                            color="Day Type", color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                            color="Day Type", color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                             text="Sales", **PLT)
             fig_ts.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=14)
             fig_ts.update_layout(height=460, showlegend=False)
@@ -2226,7 +2246,7 @@ def page_dashboard_fnb():
         hr_wd["lbl"] = hr_wd["hr"].apply(lambda x: f"{x:02d}:00")
         fig_h = px.bar(hr_wd, x="lbl", y="pax_total", color="day_type", barmode="group",
                        title="Number of transaction per hour \u2014 Weekday vs Weekend",
-                       color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                       color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                        text="pax_total", labels={"lbl":"Jam","pax_total":"Pax","day_type":""}, **PLT)
         fig_h.update_traces(textposition="outside", textfont_size=13)
         fig_h.update_layout(height=550, legend=dict(orientation="h",yanchor="bottom",y=1.02))
@@ -2237,7 +2257,7 @@ def page_dashboard_fnb():
         hm_piv = hm.pivot(index="weekday", columns="hr", values="nett_sales").fillna(0)
         hm_piv = hm_piv.reindex(["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"])
         fig_hm = px.imshow(hm_piv, aspect="auto", title="Heatmap: hari \u00d7 jam",
-                           color_continuous_scale=["#D8F3DC","#1B4332"],
+                           color_continuous_scale=["#DCEEE4","#103D28"],
                            labels=dict(x="Jam",y="Hari",color="Sales"), **PLT)
         fig_hm.update_layout(height=460)
         st.plotly_chart(fig_hm, use_container_width=True)
@@ -2248,7 +2268,7 @@ def page_dashboard_fnb():
             st.markdown(f"""
             <div style="text-align:center; padding:1rem; background:#F0FFF4; border-radius:10px; margin-bottom:1rem;">
                 <div style="font-size:0.85rem; color:#666; text-transform:uppercase; letter-spacing:1px;">Total Sales All Tenants</div>
-                <div style="font-size:2.2rem; font-weight:800; color:#1B4332;">{fmt_rp(t_nett)}</div>
+                <div style="font-size:2.2rem; font-weight:800; color:#103D28;">{fmt_rp(t_nett)}</div>
             </div>
             """, unsafe_allow_html=True)
             ta = df.groupby("tenant_name").agg(ts=("nett_sales","sum"), tp=("pax_total","sum")).reset_index().sort_values("ts", ascending=False)
@@ -2282,7 +2302,7 @@ def page_dashboard_fnb():
         seg_pax = seg_df.groupby(["segment","day_type"])["pax_total"].sum().reset_index()
         fig_sp = px.bar(seg_pax, x="segment", y="pax_total", color="day_type", barmode="group",
                         title="Tenant pax by time segment \u2014 Weekday vs Weekend",
-                        color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                        color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                         text="pax_total", category_orders={"segment": seg_order},
                         labels={"segment":"Segment","pax_total":"Pax","day_type":""}, **PLT)
         fig_sp.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
@@ -2330,7 +2350,7 @@ def page_dashboard_fnb():
             weekly_sales = df.groupby(["tenant_name","week_label"])["nett_sales"].sum().reset_index()
             fig_ws = px.bar(weekly_sales, x="tenant_name", y="nett_sales", color="week_label",
                             barmode="group", title="Tenant sales per week",
-                            text="nett_sales", color_discrete_sequence=["#8B0000","#CC3333","#DAA520","#B8860B"],
+                            text="nett_sales", color_discrete_sequence=["#8A3730","#CC3333","#DAA520","#B8860B"],
                             labels={"tenant_name":"Tenant","nett_sales":"Sales","week_label":""}, **PLT)
             fig_ws.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
             fig_ws.update_layout(height=580, legend=dict(orientation="h",yanchor="bottom",y=1.02))
@@ -2372,7 +2392,7 @@ def page_dashboard_fnb():
                     st.markdown(f"""
                     <div style="text-align:center; padding:0.5rem; background:#F5F5DC; border-radius:8px; margin-top:-0.5rem;">
                         <div style="font-size:0.7rem; color:#666;">AVERAGE SALES</div>
-                        <div style="font-size:1.1rem; font-weight:700; color:#1B4332;">{fmt_rp(avg_val)}</div>
+                        <div style="font-size:1.1rem; font-weight:700; color:#103D28;">{fmt_rp(avg_val)}</div>
                     </div>
                     """, unsafe_allow_html=True)
                 idx += 1
@@ -2381,7 +2401,7 @@ def page_dashboard_fnb():
     with tab6:
         monthly = df.groupby("month").agg(trx=("pax_total","sum"), sales=("nett_sales","sum")).reset_index().sort_values("month")
         fig_mt = px.bar(monthly, x="trx", y="month", orientation="h", title="Number of transaction per month",
-                        text="trx", color_discrete_sequence=["#8B0000"], **PLT)
+                        text="trx", color_discrete_sequence=["#8A3730"], **PLT)
         fig_mt.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
         fig_mt.update_layout(height=max(400, len(monthly)*80), yaxis=dict(autorange="reversed"),
                              xaxis_title="Transactions", yaxis_title="")
@@ -2400,9 +2420,9 @@ def page_dashboard_fnb():
         for _, row in monthly.iterrows():
             st.markdown(f"""
             <div style="display:inline-block; text-align:center; padding:0.8rem 1.5rem;
-                 background:#F0FFF4; border-radius:10px; margin:0.3rem; border:1px solid #D8F3DC;">
+                 background:#F0FFF4; border-radius:10px; margin:0.3rem; border:1px solid #DCEEE4;">
                 <div style="font-size:0.75rem; color:#666; text-transform:uppercase;">Total Sales {row['month']}</div>
-                <div style="font-size:1.3rem; font-weight:800; color:#1B4332;">{fmt_rp(row['sales'])}</div>
+                <div style="font-size:1.3rem; font-weight:800; color:#103D28;">{fmt_rp(row['sales'])}</div>
                 <div style="font-size:0.75rem; color:#888;">{row['trx']:,} pax</div>
             </div>
             """, unsafe_allow_html=True)
@@ -2417,7 +2437,7 @@ def page_dashboard_fnb():
             dma["MA_14"] = dma["Sales"].rolling(14, min_periods=1).mean()
             fig_ma = go.Figure()
             fig_ma.add_trace(go.Scatter(x=dma["Tanggal"], y=dma["Sales"], name="Daily",
-                                        mode="lines", line=dict(color="#D8F3DC",width=1)))
+                                        mode="lines", line=dict(color="#DCEEE4",width=1)))
             fig_ma.add_trace(go.Scatter(x=dma["Tanggal"], y=dma["MA_7"], name="MA 7-day",
                                         mode="lines", line=dict(color=COLORS["accent"],width=2.5)))
             fig_ma.add_trace(go.Scatter(x=dma["Tanggal"], y=dma["MA_14"], name="MA 14-day",
@@ -2428,7 +2448,7 @@ def page_dashboard_fnb():
             dd = df.groupby("date_only").agg(disc=("discount_total","sum"), sales=("nett_sales","sum"), pax=("pax_total","sum")).reset_index()
             dd.columns = ["Tanggal","Discount","Sales","Pax"]
             fig_sc = px.scatter(dd, x="Discount", y="Sales", size="Pax", title="Discount vs sales impact",
-                                color="Pax", color_continuous_scale=["#D8F3DC","#1B4332"], **PLT)
+                                color="Pax", color_continuous_scale=["#DCEEE4","#103D28"], **PLT)
             fig_sc.update_layout(height=500)
             st.plotly_chart(fig_sc, use_container_width=True)
 
@@ -3266,7 +3286,7 @@ def page_dashboard_playground():
         "📅 Weekly Report","📆 Monthly Overview","📊 Deep Dive"
     ])
 
-    PG_PALETTE = ["#6A4C93","#9B72CF","#D4A843","#457B9D","#E76F51","#E63946"]
+    PG_PALETTE = ["#1A6B3F","#2E9160","#C08A2C","#3B4C7A","#9E6B4A","#C0483C"]
 
     # TAB 1: TREND HARIAN
     with tab1:
@@ -3274,9 +3294,9 @@ def page_dashboard_playground():
             child=("child_total","sum"),comp=("companion_total","sum")).reset_index()
         fig = make_subplots(specs=[[{"secondary_y":True}]])
         fig.add_trace(go.Bar(x=daily["date_only"].astype(str),y=daily["amount"],name="Revenue",
-                             marker_color="#6A4C93",opacity=0.85),secondary_y=False)
+                             marker_color="#1A6B3F",opacity=0.85),secondary_y=False)
         fig.add_trace(go.Scatter(x=daily["date_only"].astype(str),y=daily["trx"],name="Transaksi",
-                                 mode="lines+markers",line=dict(color="#D4A843",width=2.5)),secondary_y=True)
+                                 mode="lines+markers",line=dict(color="#C08A2C",width=2.5)),secondary_y=True)
         fig.update_layout(title="Daily Revenue & Transaction Trend",height=520,hovermode="x unified",**PLT)
         fig.update_yaxes(title_text="Revenue (Rp)",secondary_y=False)
         fig.update_yaxes(title_text="Transaksi",secondary_y=True)
@@ -3287,7 +3307,7 @@ def page_dashboard_playground():
         wd = df.groupby("weekday")["amount"].mean().reindex(wd_order).fillna(0).reset_index()
         wd.columns = ["Day","Avg"]
         fig_wd = px.bar(wd,x="Day",y="Avg",title="Rata-rata Revenue per Hari",
-                        color="Avg",color_continuous_scale=["#E8D5F5","#6A4C93"],**PLT)
+                        color="Avg",color_continuous_scale=["#DCEEE4","#1A6B3F"],**PLT)
         fig_wd.update_layout(height=460,showlegend=False,coloraxis_showscale=False)
         clean_hover(fig_wd, prefix="Rp ")
         st.plotly_chart(fig_wd, use_container_width=True)
@@ -3298,20 +3318,20 @@ def page_dashboard_playground():
         with c1:
             visitor_data = pd.DataFrame({"Tipe":["Anak","Pendamping"],"Jumlah":[t_child,t_comp]})
             fig_vc = px.pie(visitor_data,values="Jumlah",names="Tipe",title="Komposisi Pengunjung",
-                            color_discrete_sequence=["#6A4C93","#D4A843"],hole=0.4,**PLT)
+                            color_discrete_sequence=["#1A6B3F","#C08A2C"],hole=0.4,**PLT)
             fig_vc.update_layout(height=460)
             st.plotly_chart(fig_vc, use_container_width=True)
         with c2:
             daily_v = df.groupby("date_only").agg(child=("child_total","sum"),comp=("companion_total","sum")).reset_index()
             fig_v = go.Figure()
-            fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["child"],name="Anak",marker_color="#6A4C93"))
-            fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["comp"],name="Pendamping",marker_color="#D4A843"))
+            fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["child"],name="Anak",marker_color="#1A6B3F"))
+            fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["comp"],name="Pendamping",marker_color="#C08A2C"))
             fig_v.update_layout(title="Daily Child vs Companion",barmode="stack",height=460,**PLT)
             st.plotly_chart(fig_v, use_container_width=True)
 
         # Avg child per transaction distribution
         fig_dist = px.histogram(df,x="child_total",title="Distribusi Jumlah Anak per Transaksi",
-                                nbins=int(max(df["child_total"].max(),10)),color_discrete_sequence=["#6A4C93"],
+                                nbins=int(max(df["child_total"].max(),10)),color_discrete_sequence=["#1A6B3F"],
                                 labels={"child_total":"Jumlah Anak","count":"Frekuensi"},**PLT)
         fig_dist.update_layout(height=460)
         st.plotly_chart(fig_dist, use_container_width=True)
@@ -3330,7 +3350,7 @@ def page_dashboard_playground():
         with c1:
             trf = df.groupby("day_type").agg(revenue=("amount","sum"),trx=("amount","count")).reset_index()
             fig_tr = px.bar(trf,x="day_type",y="revenue",title="Revenue — Weekday vs Weekend",
-                            color="day_type",color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                            color="day_type",color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                             text="revenue",**PLT)
             fig_tr.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
             fig_tr.update_layout(height=460,showlegend=False)
@@ -3338,7 +3358,7 @@ def page_dashboard_playground():
         with c2:
             trf_c = df.groupby("day_type")["child_total"].sum().reset_index()
             fig_tc = px.bar(trf_c,x="day_type",y="child_total",title="Total Anak — Weekday vs Weekend",
-                            color="day_type",color_discrete_map={"Weekday":"#457B9D","Weekend":"#E63946"},
+                            color="day_type",color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
                             text="child_total",**PLT)
             fig_tc.update_traces(textposition="outside",texttemplate="%{text:,}",textfont_size=14)
             fig_tc.update_layout(height=460,showlegend=False)
@@ -3350,9 +3370,9 @@ def page_dashboard_playground():
         wd_child = df.groupby("weekday")["child_total"].mean().reindex(wd_order).fillna(0)
         combo = pd.DataFrame({"Hari":wd_order,"Avg Revenue":wd_avg2.values,"Avg Anak":wd_child.values})
         fig_cb = make_subplots(specs=[[{"secondary_y":True}]])
-        fig_cb.add_trace(go.Bar(x=combo["Hari"],y=combo["Avg Revenue"],name="Avg Revenue",marker_color="#6A4C93"),secondary_y=False)
+        fig_cb.add_trace(go.Bar(x=combo["Hari"],y=combo["Avg Revenue"],name="Avg Revenue",marker_color="#1A6B3F"),secondary_y=False)
         fig_cb.add_trace(go.Scatter(x=combo["Hari"],y=combo["Avg Anak"],name="Avg Anak",
-                                    mode="lines+markers",line=dict(color="#D4A843",width=2.5)),secondary_y=True)
+                                    mode="lines+markers",line=dict(color="#C08A2C",width=2.5)),secondary_y=True)
         fig_cb.update_layout(title="Avg Revenue & Anak per Hari",height=460,**PLT)
         st.plotly_chart(fig_cb, use_container_width=True)
 
@@ -3361,7 +3381,7 @@ def page_dashboard_playground():
         wk = df.groupby("week_label").agg(revenue=("amount","sum"),trx=("amount","count"),
             child=("child_total","sum")).reset_index()
         fig_wk = px.bar(wk,x="week_label",y="revenue",title="Revenue per Week",
-                        text="revenue",color_discrete_sequence=["#6A4C93"],**PLT)
+                        text="revenue",color_discrete_sequence=["#1A6B3F"],**PLT)
         fig_wk.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
         fig_wk.update_layout(height=520)
         clean_hover(fig_wk, prefix="Rp ")
@@ -3378,7 +3398,7 @@ def page_dashboard_playground():
         avg_val = day_sales.mean()
         dc = pd.DataFrame({"Hari":[day_labels.get(d,d) for d in wd_order],"Revenue":day_sales.values})
         fig_dd = px.bar(dc,x="Hari",y="Revenue",title=f"Playground TnT — {sel_wk} (Avg: Rp {avg_val:,.0f})",
-                        text="Revenue",color_discrete_sequence=["#9B72CF"],**PLT)
+                        text="Revenue",color_discrete_sequence=["#2E9160"],**PLT)
         fig_dd.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
         fig_dd.update_layout(height=460)
         st.plotly_chart(fig_dd, use_container_width=True)
@@ -3390,13 +3410,13 @@ def page_dashboard_playground():
         c1,c2 = st.columns(2)
         with c1:
             fig_mr = px.bar(mt,x="month",y="revenue",title="Revenue per Bulan",text="revenue",
-                            color_discrete_sequence=["#6A4C93"],**PLT)
+                            color_discrete_sequence=["#1A6B3F"],**PLT)
             fig_mr.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
             fig_mr.update_layout(height=460)
             st.plotly_chart(fig_mr, use_container_width=True)
         with c2:
             fig_mc = px.bar(mt,x="month",y="child",title="Total Anak per Bulan",text="child",
-                            color_discrete_sequence=["#D4A843"],**PLT)
+                            color_discrete_sequence=["#C08A2C"],**PLT)
             fig_mc.update_traces(textposition="outside",texttemplate="%{text:,}",textfont_size=13)
             fig_mc.update_layout(height=460)
             st.plotly_chart(fig_mc, use_container_width=True)
@@ -3404,9 +3424,9 @@ def page_dashboard_playground():
         for _,row in mt.iterrows():
             st.markdown(f"""
             <div style="display:inline-block;text-align:center;padding:0.8rem 1.5rem;
-                 background:#F3ECFA;border-radius:10px;margin:0.3rem;border:1px solid #E8D5F5;">
+                 background:#F3ECFA;border-radius:10px;margin:0.3rem;border:1px solid #DCEEE4;">
                 <div style="font-size:0.75rem;color:#666;text-transform:uppercase;">Total {row['month']}</div>
-                <div style="font-size:1.3rem;font-weight:800;color:#6A4C93;">{fmt_rp(row['revenue'])}</div>
+                <div style="font-size:1.3rem;font-weight:800;color:#1A6B3F;">{fmt_rp(row['revenue'])}</div>
                 <div style="font-size:0.75rem;color:#888;">{row['child']:,} anak · {row['trx']:,} transaksi</div>
             </div>
             """,unsafe_allow_html=True)
@@ -3420,15 +3440,15 @@ def page_dashboard_playground():
             dma["MA_7"] = dma["Revenue"].rolling(7,min_periods=1).mean()
             dma["MA_14"] = dma["Revenue"].rolling(14,min_periods=1).mean()
             fig_ma = go.Figure()
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["Revenue"],name="Daily",mode="lines",line=dict(color="#E8D5F5",width=1)))
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_7"],name="MA 7-day",mode="lines",line=dict(color="#9B72CF",width=2.5)))
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_14"],name="MA 14-day",mode="lines",line=dict(color="#6A4C93",width=2.5)))
+            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["Revenue"],name="Daily",mode="lines",line=dict(color="#DCEEE4",width=1)))
+            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_7"],name="MA 7-day",mode="lines",line=dict(color="#2E9160",width=2.5)))
+            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_14"],name="MA 14-day",mode="lines",line=dict(color="#1A6B3F",width=2.5)))
             fig_ma.update_layout(title="Moving Average Analysis",height=500,**PLT)
             st.plotly_chart(fig_ma, use_container_width=True)
         with c2:
             fig_sc = px.scatter(df,x="child_total",y="amount",size="companion_total",
                                 title="Children vs Revenue per Transaction",
-                                color="companion_total",color_continuous_scale=["#E8D5F5","#6A4C93"],
+                                color="companion_total",color_continuous_scale=["#DCEEE4","#1A6B3F"],
                                 labels={"child_total":"Jumlah Anak","amount":"Revenue (Rp)","companion_total":"Pendamping"},**PLT)
             fig_sc.update_layout(height=500)
             st.plotly_chart(fig_sc, use_container_width=True)
@@ -3523,12 +3543,12 @@ def page_master_dashboard():
         with c1:
             contrib = pd.DataFrame({"Segment":["F&B Tenants","Playground TnT"],"Revenue":[fnb_nett, pg_amount]})
             fig_pie = px.pie(contrib,values="Revenue",names="Segment",title="Kontribusi Revenue — F&B vs Playground",
-                             color_discrete_sequence=["#2D6A4F","#6A4C93"],hole=0.4,**PLT)
+                             color_discrete_sequence=["#1A6B3F","#1A6B3F"],hole=0.4,**PLT)
             fig_pie.update_layout(height=460)
             st.plotly_chart(fig_pie, use_container_width=True)
         with c2:
             fig_bar = px.bar(contrib,x="Segment",y="Revenue",title="Total Revenue per Segment",
-                             text="Revenue",color="Segment",color_discrete_map={"F&B Tenants":"#2D6A4F","Playground TnT":"#6A4C93"},**PLT)
+                             text="Revenue",color="Segment",color_discrete_map={"F&B Tenants":"#1A6B3F","Playground TnT":"#1A6B3F"},**PLT)
             fig_bar.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
             fig_bar.update_layout(height=460,showlegend=False)
             st.plotly_chart(fig_bar, use_container_width=True)
@@ -3544,7 +3564,7 @@ def page_master_dashboard():
             ta = pd.concat([ta, pg_row], ignore_index=True)
         ta = ta.sort_values("Revenue",ascending=False)
         fig_all = px.bar(ta,x="Tenant",y="Revenue",title="Revenue All Units",
-                         text="Revenue",color_discrete_sequence=CHART_PALETTE+["#6A4C93"],**PLT)
+                         text="Revenue",color_discrete_sequence=CHART_PALETTE+["#1A6B3F"],**PLT)
         fig_all.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=12)
         fig_all.update_layout(height=520,showlegend=False)
         st.plotly_chart(fig_all, use_container_width=True)
@@ -3559,15 +3579,15 @@ def page_master_dashboard():
         merged["Total"] = merged["F&B"] + merged["Playground"]
 
         fig_dl = go.Figure()
-        fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",marker_color="#2D6A4F"))
-        fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",marker_color="#6A4C93"))
+        fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",marker_color="#1A6B3F"))
+        fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",marker_color="#1A6B3F"))
         fig_dl.update_layout(title="Daily Revenue — F&B vs Playground",barmode="stack",height=520,**PLT)
         st.plotly_chart(fig_dl, use_container_width=True)
 
         fig_ln = go.Figure()
-        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",line=dict(color="#2D6A4F",width=2.5)))
-        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",line=dict(color="#6A4C93",width=2.5)))
-        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Total"],name="Total",line=dict(color="#D4A843",width=3,dash="dash")))
+        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",line=dict(color="#1A6B3F",width=2.5)))
+        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",line=dict(color="#1A6B3F",width=2.5)))
+        fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Total"],name="Total",line=dict(color="#C08A2C",width=3,dash="dash")))
         fig_ln.update_layout(title="Daily Revenue Trend Comparison",height=520,**PLT)
         st.plotly_chart(fig_ln, use_container_width=True)
 
@@ -3581,8 +3601,8 @@ def page_master_dashboard():
         mt_merged["Grand Total"] = mt_merged["F&B"] + mt_merged["Playground"]
 
         fig_mb = go.Figure()
-        fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["F&B"],name="F&B",marker_color="#2D6A4F"))
-        fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["Playground"],name="Playground",marker_color="#6A4C93"))
+        fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["F&B"],name="F&B",marker_color="#1A6B3F"))
+        fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["Playground"],name="Playground",marker_color="#1A6B3F"))
         fig_mb.update_layout(title="Monthly Revenue — F&B vs Playground",barmode="group",height=520,**PLT)
         st.plotly_chart(fig_mb, use_container_width=True)
 
