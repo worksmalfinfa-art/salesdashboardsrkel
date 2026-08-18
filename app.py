@@ -653,6 +653,14 @@ def apply_custom_css():
     [data-testid="stDataFrame"]{
       background:var(--card);border:1.5px solid var(--line);
       border-radius:var(--r);padding:10px 12px}
+    /* Plotly anchors its toolbar to the plot, which reaches the card's padding
+       edge, so it protruded 11px past the border. Pull it inside and let it
+       fade in on hover rather than sitting on the chart permanently. */
+    [data-testid="stPlotlyChart"] .modebar{
+      right:18px!important;top:8px!important;
+      opacity:0;transition:opacity .15s ease}
+    [data-testid="stPlotlyChart"]:hover .modebar{opacity:1}
+    [data-testid="stPlotlyChart"] .modebar-btn{color:var(--muted)!important}
     .cardmark{display:none}
     .box.dark{background:var(--g900);border-color:var(--g900);color:#fff}
     .box h3{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
@@ -846,7 +854,14 @@ def show_chart(fig, **kw):
         fig.update_layout(title=None)
         st.markdown(f'<div class="chart-title">{title}</div>', unsafe_allow_html=True)
     kw.setdefault("use_container_width", True)
-    kw.setdefault("config", {"displayModeBar": False})
+    # Zoom, pan and reset-to-fit stay available; only the export and lasso
+    # buttons are dropped, since they duplicate the export row and do nothing
+    # useful on these chart types.
+    kw.setdefault("config", {
+        "displayModeBar": True, "displaylogo": False,
+        "modeBarButtonsToRemove": ["lasso2d", "select2d", "toImage",
+                                   "autoScale2d", "toggleSpikelines"],
+        "scrollZoom": False})
     st.plotly_chart(fig, **kw)
 
 
@@ -2197,6 +2212,12 @@ FLAT = "#F3F4F1"
 def _daily(d, val, cnt):
     g = d.groupby(d["sales_date"].dt.date).agg(v=(val, "sum"), c=(cnt, "sum")).reset_index()
     g.columns = ["day", "v", "c"]
+    # Back to datetime64: a column of datetime.date objects can reach Plotly
+    # unparsed, and an axis with nothing it recognises falls back to the
+    # current clock -- which is why the trend chart showed seconds instead of
+    # a month of dates.
+    g["day"] = pd.to_datetime(g["day"], errors="coerce")
+    g = g.dropna(subset=["day"]).sort_values("day")
     return g
 
 
@@ -2220,7 +2241,7 @@ def _bars_vs_avg(x, y, height=210, hatch_below=True):
 
 def sec_trend(d, cfg):
     g = _daily(d, cfg["val"], cfg["cnt"])
-    if g.empty:
+    if g.empty or not g["v"].notna().any():
         st.info("Tidak ada data pada rentang ini."); return
 
     c = st.columns([2, 1])
