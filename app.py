@@ -564,6 +564,16 @@ def apply_custom_css():
     /* ---------------- cards ---------------- */
     .box{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);
       padding:15px;height:100%}
+    /* A card holding a Streamlit widget cannot be an HTML wrapper: Streamlit
+       sanitises each st.markdown call on its own and closes any dangling div,
+       so an opening tag in one call never wraps a chart emitted by the next.
+       Those cards use st.container(border=True) with an invisible marker, and
+       :has() styles only the containers that carry it -- the testid alone
+       belongs to every vertical block on the page. */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> div > div > .cardmark){
+      background:var(--card);border:1.5px solid var(--line)!important;
+      border-radius:var(--r);padding:15px}
+    .cardmark{display:none}
     .box.dark{background:var(--g900);border-color:var(--g900);color:#fff}
     .box h3{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
     .box.dark h3{color:#fff}
@@ -697,13 +707,30 @@ def render_kpi(label, value, delta=None, variant="", caption=None, featured=Fals
     """, unsafe_allow_html=True)
 
 
-def render_rows(items):
-    """items: list of (tenant_id, name, sub, right_html)."""
+def rows_html(items):
+    """items: list of (tenant_id, name, sub, right_html). Returns markup so the
+    caller can emit a whole card in a single st.markdown call."""
     body = "".join(
         f'<div class="row"><span class="sq" style="background:{tenant_hue(tid, n)}">'
         f'{initials(n)}</span><div><b>{n}</b><small>{s}</small></div>{r}</div>'
         for tid, n, s, r in items)
-    st.markdown(f'<div class="rows">{body}</div>', unsafe_allow_html=True)
+    return f'<div class="rows">{body}</div>'
+
+
+def render_card(title, inner, foot=None, dark=False):
+    """A complete card in one call -- the only way an HTML card wrapper
+    survives Streamlit's per-call sanitising."""
+    f = f'<p class="foot">{foot}</p>' if foot else ""
+    st.markdown(f'<div class="box{" dark" if dark else ""}"><h3>{title}</h3>{inner}{f}</div>',
+                unsafe_allow_html=True)
+
+
+def card_container():
+    """Bordered container styled as a card. Use when a Streamlit widget must
+    live inside it; drop the marker in as the first child."""
+    c = st.container(border=True)
+    c.markdown('<span class="cardmark"></span>', unsafe_allow_html=True)
+    return c
 
 
 def move_tag(pct):
@@ -713,12 +740,12 @@ def move_tag(pct):
     return f'<span class="tag {cls}">{arrow} {abs(pct):.1f}%</span>'
 
 
-def render_gauge(pct, label):
-    """Half-circle arc. Drawn as SVG rather than a Plotly indicator so the
-    stroke caps stay round and it matches the rest of the card system."""
+def gauge_html(pct, label):
+    """Half-circle arc as SVG rather than a Plotly indicator, so the stroke
+    caps stay round and it sits inside the card system like any other markup."""
     p = max(0.0, min(float(pct), 1.0))
     length = 214.0
-    st.markdown(f"""
+    return f"""
     <div class="gwrap"><div class="in">
       <svg width="172" height="99" viewBox="0 0 170 98" aria-label="{label} {p*100:.0f} persen">
         <path d="M17 90 A68 68 0 0 1 153 90" fill="none" stroke="#F3F4F1"
@@ -728,8 +755,7 @@ def render_gauge(pct, label):
               stroke-dashoffset="{length * (1 - p):.1f}"/>
       </svg>
       <div class="val"><b class="num">{p*100:.0f}%</b><small>{label}</small></div>
-    </div></div>
-    """, unsafe_allow_html=True)
+    </div></div>"""
 
 
 def fmt_rp(val):
@@ -2072,6 +2098,7 @@ tr:nth-child(even){{background:#f9f9f9;}}.page-break{{page-break-after:auto;}}
 # ============================================================================
 def page_dashboard_fnb():
     render_header()
+    render_page_head("Dashboard F&B", "Analisis penjualan tenant ESB POS")
     db = get_db()
     user = st.session_state["user"]
 
@@ -2569,23 +2596,25 @@ def page_performance():
 
     if df.empty:
         render_page_head("Performa Tenant", "Belum ada data penjualan")
-        st.markdown(
-            '<div class="box"><h3>Belum ada data</h3>'
-            '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file ESB atau CSV '
-            'Playground lebih dulu — halaman ini akan terisi otomatis.</p></div>',
-            unsafe_allow_html=True)
+        render_card("Belum ada data",
+                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file ESB '
+                    'atau CSV Playground lebih dulu — halaman ini akan terisi otomatis.</p>')
         return
 
     months = sorted(df["month"].unique())
-    month = st.selectbox("Periode", months, index=len(months) - 1)
+    # Selector sits beside the title, not stacked above it on bare canvas.
+    # Streamlit fills a column wherever the call happens, so the period can be
+    # read first and the subtitle that depends on it written afterwards.
+    hc = st.columns([3, 1])
+    with hc[1]:
+        month = st.selectbox("Periode", months, index=len(months) - 1,
+                             label_visibility="collapsed")
     prev = months[months.index(month) - 1] if months.index(month) > 0 else None
 
     cur_df = df[df["month"] == month]
     prev_df = df[df["month"] == prev] if prev else df.iloc[0:0]
 
     # A month still in progress must never be measured against a complete one.
-    # Six days against thirty-one reads as a collapse that never happened, and
-    # a page that cries wolf is one people stop opening.
     cutoff = None
     last_day = cur_df["sales_date"].max()
     if pd.notna(last_day) and last_day.date() < pd.Period(month, "M").end_time.date():
@@ -2596,10 +2625,11 @@ def page_performance():
     if not prev:
         sub = f"{month} · tidak ada periode sebelumnya untuk dibandingkan"
     elif cutoff:
-        sub = f"{month} · dibandingkan {prev}, dibatasi tanggal 1–{cutoff} di kedua sisi"
+        sub = f"{month} · vs {prev}, dibatasi tanggal 1–{cutoff} di kedua sisi"
     else:
-        sub = f"{month} · dibandingkan {prev}, bulan penuh"
-    render_page_head("Performa Tenant", sub)
+        sub = f"{month} · vs {prev}, bulan penuh"
+    with hc[0]:
+        render_page_head("Performa Tenant", sub)
 
     def _agg(d):
         return (d.groupby(["tenant_id", "tenant_name"], dropna=False)
@@ -2612,6 +2642,7 @@ def page_performance():
     check = total / vis if vis else 0
     check_prev = total_prev / vis_prev if vis_prev else 0
     pct = lambda a, b: ((a - b) / b * 100) if b else None
+    id_fmt = lambda n: f"{n:,.0f}".replace(",", ".")
 
     prev_map = dict(zip(before["tenant_id"], before["sales"]))
     board = cur.copy()
@@ -2622,14 +2653,14 @@ def page_performance():
     board = board.sort_values("sales", ascending=False)
     falling = board[board["mom"].notna() & (board["mom"] < -10)].sort_values("mom")
 
-    # ---------------- KPI row ----------------
+    # ---------------- KPI ----------------
     k = st.columns(4)
     with k[0]:
         render_kpi("Nett Sales", fmt_rp(total), pct(total, total_prev), featured=True,
                    caption=f"dari {fmt_rp(total_prev)}" if total_prev else None)
     with k[1]:
-        render_kpi("Pengunjung", f"{vis:,.0f}".replace(",", "."), pct(vis, vis_prev),
-                   caption=f"dari {vis_prev:,.0f}".replace(",", ".") if vis_prev else None)
+        render_kpi("Pengunjung", id_fmt(vis), pct(vis, vis_prev),
+                   caption=f"dari {id_fmt(vis_prev)}" if vis_prev else None)
     with k[2]:
         render_kpi("Rata / Pengunjung", fmt_rp(check), pct(check, check_prev),
                    caption=f"dari {fmt_rp(check_prev)}" if check_prev else None)
@@ -2637,77 +2668,73 @@ def page_performance():
         render_kpi("Perlu Perhatian", f"{len(falling)}",
                    caption="tenant turun lebih dari 10%")
 
-    # ---------------- row 2: chart | alert | tenant list ----------------
+    # ---------------- chart | alert | tenant ----------------
     c = st.columns([2, 1, 1])
     with c[0]:
-        st.markdown('<div class="box"><h3>Penjualan per hari</h3>', unsafe_allow_html=True)
-        day_id = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
-        daily = (cur_df.assign(dow=cur_df["sales_date"].dt.dayofweek)
-                       .groupby("dow")["nett_sales"].sum()
-                       .reindex(range(7), fill_value=0))
-        # Sunday first, matching how the week is read here.
-        order = [6, 0, 1, 2, 3, 4, 5]
-        vals = [float(daily.get(d, 0)) for d in order]
-        avg = sum(vals) / len(vals) if vals else 0
-        # Hatched below the weekly average, solid at or above it. The pattern
-        # carries a threshold, so the shape of the week reads before any number.
-        fig = go.Figure(go.Bar(
-            x=day_id, y=vals,
-            marker=dict(
-                color=["#1A6B3F" if v >= avg else "#F3F4F1" for v in vals],
-                cornerradius=22,
-                pattern=dict(shape=["" if v >= avg else "/" for v in vals],
-                             fgcolor="#D9DDD7", size=5, solidity=.28)),
-            hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"))
-        fig.update_layout(height=210, margin=dict(t=6, b=6, l=6, r=6),
-                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                          yaxis=dict(visible=False), xaxis=dict(showgrid=False),
-                          showlegend=False, bargap=.38)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        st.markdown(
-            '<p class="foot">Bar pekat menandai hari di atas rata-rata mingguan, '
-            'bar diarsir di bawahnya.</p></div>', unsafe_allow_html=True)
+        # Holds a chart, so it is a bordered container rather than HTML.
+        with card_container():
+            st.markdown('<h3>Penjualan per hari</h3>', unsafe_allow_html=True)
+            days = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
+            daily = (cur_df.assign(dow=cur_df["sales_date"].dt.dayofweek)
+                           .groupby("dow")["nett_sales"].sum()
+                           .reindex(range(7), fill_value=0))
+            vals = [float(daily.get(d, 0)) for d in [6, 0, 1, 2, 3, 4, 5]]
+            active = [v for v in vals if v > 0]
+            avg = sum(active) / len(active) if active else 0
+            # Hatched below the weekly average, solid at or above it. Days with
+            # no trading at all are left flat rather than drawn as a stub,
+            # which would read as a real but tiny figure.
+            fig = go.Figure(go.Bar(
+                x=days, y=vals,
+                marker=dict(
+                    color=["#1A6B3F" if v >= avg and v > 0 else "#F3F4F1" for v in vals],
+                    cornerradius=18,
+                    pattern=dict(shape=["" if (v >= avg and v > 0) else "/" for v in vals],
+                                 fgcolor="#D9DDD7", size=5, solidity=.3)),
+                hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"))
+            fig.update_layout(height=200, margin=dict(t=4, b=4, l=4, r=4),
+                              paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                              yaxis=dict(visible=False), showlegend=False, bargap=.4,
+                              xaxis=dict(showgrid=False, tickfont=dict(size=11, color="#8B948D")))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('<p class="foot" style="margin:0">Bar pekat menandai hari di atas '
+                        'rata-rata, bar diarsir di bawahnya.</p>', unsafe_allow_html=True)
 
     with c[1]:
         if not falling.empty:
             w = falling.iloc[0]
-            st.markdown(f"""
-            <div class="box">
-              <h3 style="color:#C0483C">Perlu perhatian</h3>
-              <p class="big-alert">{w['tenant_name']} turun {abs(w['mom']):.1f}%</p>
-              <p style="font-size:11.5px;color:#8B948D;line-height:1.45;margin:0">
-                {fmt_rp(prev_map.get(w['tenant_id'], 0))} &rarr; {fmt_rp(w['sales'])}
-                pada periode ini.</p>
-              <p class="foot">{len(falling)} tenant turun lebih dari 10%.</p>
-            </div>""", unsafe_allow_html=True)
+            render_card(
+                "Perlu perhatian",
+                f'<p class="big-alert">{w["tenant_name"]} turun {abs(w["mom"]):.1f}%</p>'
+                f'<p style="font-size:11.5px;color:#8B948D;line-height:1.45;margin:0">'
+                f'{fmt_rp(prev_map.get(w["tenant_id"], 0))} &rarr; {fmt_rp(w["sales"])} '
+                f'pada periode ini.</p>',
+                foot=f"{len(falling)} tenant turun lebih dari 10%.")
         else:
-            st.markdown("""
-            <div class="box">
-              <h3>Perlu perhatian</h3>
-              <p class="big-alert" style="color:#1A6B3F">Tidak ada</p>
-              <p style="font-size:11.5px;color:#8B948D;margin:0">Tidak ada tenant yang
-                 turun lebih dari 10% dibanding periode sebelumnya.</p>
-            </div>""", unsafe_allow_html=True)
+            render_card(
+                "Perlu perhatian",
+                '<p class="big-alert" style="color:#1A6B3F">Tidak ada</p>'
+                '<p style="font-size:11.5px;color:#8B948D;margin:0">Tidak ada tenant yang '
+                'turun lebih dari 10% dibanding periode sebelumnya.</p>')
 
     with c[2]:
-        st.markdown('<div class="box"><h3>Tenant</h3>', unsafe_allow_html=True)
-        render_rows([(r["tenant_id"], r["tenant_name"],
-                      f"{r['visitors']:,.0f} pengunjung".replace(",", "."),
-                      f'<span class="amt num">{fmt_rp(r["sales"]).replace("Rp ", "")}</span>')
-                     for _, r in board.iterrows()])
-        st.markdown('<p class="foot">Warna tiap tenant tetap sama di seluruh aplikasi.</p></div>',
-                    unsafe_allow_html=True)
+        render_card("Tenant",
+                    rows_html([(r["tenant_id"], r["tenant_name"],
+                                f'{id_fmt(r["visitors"])} pengunjung',
+                                f'<span class="amt num">'
+                                f'{fmt_rp(r["sales"]).replace("Rp ", "")}</span>')
+                               for _, r in board.iterrows()]),
+                    foot="Warna tiap tenant tetap sama di seluruh aplikasi.")
 
-    # ---------------- row 3: movement | target | occupancy ----------------
+    # ---------------- movement | target | occupancy ----------------
     c2 = st.columns([2, 1, 1])
     with c2[0]:
-        st.markdown('<div class="box"><h3>Pergerakan bulan ini</h3>', unsafe_allow_html=True)
-        render_rows([(r["tenant_id"], r["tenant_name"],
-                      f'{fmt_rp(r["avg_check"])} per pengunjung · '
-                      f'{r["visitors"]:,.0f} orang'.replace(",", "."),
-                      move_tag(r["mom"]))
-                     for _, r in board.iterrows()])
-        st.markdown("</div>", unsafe_allow_html=True)
+        render_card("Pergerakan bulan ini",
+                    rows_html([(r["tenant_id"], r["tenant_name"],
+                                f'{fmt_rp(r["avg_check"])} per pengunjung · '
+                                f'{id_fmt(r["visitors"])} orang',
+                                move_tag(r["mom"]))
+                               for _, r in board.iterrows()]))
 
     with c2[1]:
         targets = db.get_targets()
@@ -2716,15 +2743,13 @@ def page_performance():
             sel = targets[targets["period_month"].astype(str).str[:7] == month]
             tmap = dict(zip(sel["tenant_id"], sel["target_nett"])) if not sel.empty else {}
         target_total = sum(tmap.get(t, 0) for t in board["tenant_id"])
-        st.markdown('<div class="box"><h3>Capaian target</h3>', unsafe_allow_html=True)
         if target_total:
-            render_gauge(total / target_total, f"dari {fmt_rp(target_total)}")
+            render_card("Capaian target",
+                        gauge_html(total / target_total, f"dari {fmt_rp(target_total)}"))
         else:
-            render_gauge(0, "target belum diisi")
-            st.markdown('<p class="foot">Isi target di <b>Kelola Unit &amp; Sewa &rarr; '
-                        'Target</b> untuk mengaktifkan kolom ini.</p>',
-                        unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            render_card("Capaian target", gauge_html(0, "target belum diisi"),
+                        foot="Isi target di <b>Kelola Unit &amp; Sewa &rarr; Target</b> "
+                             "untuk mengaktifkan kartu ini.")
 
     with c2[2]:
         units, tenancies = db.get_units(), db.get_tenancies()
@@ -2736,15 +2761,16 @@ def page_performance():
             f'<i style="flex:1;height:5px;border-radius:20px;background:'
             f'{"#2E9160" if i < occupied else "rgba(255,255,255,.2)"}"></i>'
             for i in range(max(n_units, 1)))
+        empty = n_units - occupied
         st.markdown(f"""
         <div class="box dark">
           <div class="lb">Okupansi unit<span class="arw">&#8599;</span></div>
-          <div class="v num" style="font-size:33px;font-weight:800;margin:9px 0 2px;
+          <div class="v num" style="font-size:31px;font-weight:800;margin:8px 0 2px;
                letter-spacing:-.04em">{occupied} / {n_units}</div>
           <div class="foot" style="margin-top:2px">
-            {"Seluruh unit terisi" if occupied == n_units and n_units else
-             f"{n_units - occupied} unit kosong"}</div>
-          <div style="display:flex;gap:5px;margin-top:13px">{bars}</div>
+            {"Seluruh unit terisi" if empty == 0 and n_units else
+             f"{empty} unit tanpa penyewa aktif"}</div>
+          <div style="display:flex;gap:5px;margin-top:12px">{bars}</div>
         </div>""", unsafe_allow_html=True)
 
     # ---------------- per unit ----------------
@@ -2753,17 +2779,18 @@ def page_performance():
                           .agg(sales=("nett_sales", "sum"), visitors=("visitors", "sum"),
                                brand=("tenant_name", lambda s: ", ".join(sorted(set(s)))))
                           .reset_index().sort_values("sales", ascending=False))
-        st.markdown('<div class="box"><h3>Performa per unit</h3>', unsafe_allow_html=True)
-        st.dataframe(per_unit, use_container_width=True, hide_index=True,
-            column_config={
-                "unit_code": st.column_config.TextColumn("Unit"),
-                "brand":     st.column_config.TextColumn("Brand pada periode ini"),
-                "sales":     st.column_config.NumberColumn("Nett Sales (Rp)", format="localized"),
-                "visitors":  st.column_config.NumberColumn("Pengunjung", format="localized"),
-            })
-        st.markdown('<p class="foot">Unit yang berganti penyewa di tengah periode '
-                    'menjumlahkan kontribusi kedua brand sesuai tanggal masing-masing.</p></div>',
-                    unsafe_allow_html=True)
+        with card_container():
+            st.markdown('<h3>Performa per unit</h3>', unsafe_allow_html=True)
+            st.dataframe(per_unit, use_container_width=True, hide_index=True,
+                column_config={
+                    "unit_code": st.column_config.TextColumn("Unit"),
+                    "brand":     st.column_config.TextColumn("Brand pada periode ini"),
+                    "sales":     st.column_config.NumberColumn("Nett Sales (Rp)", format="localized"),
+                    "visitors":  st.column_config.NumberColumn("Pengunjung", format="localized"),
+                })
+            st.markdown('<p class="foot" style="margin:0">Unit yang berganti penyewa di tengah '
+                        'periode menjumlahkan kontribusi kedua brand sesuai tanggalnya.</p>',
+                        unsafe_allow_html=True)
 
 def _occupancy_table(units, tenancies):
     """One row per unit, with whoever occupies it today."""
@@ -3180,14 +3207,8 @@ def page_upload_playground():
 # ============================================================================
 def page_dashboard_playground():
     render_header()
+    render_page_head("Dashboard Playground", "Twist N' Turns · analisis transaksi harian")
     db = get_db()
-
-    st.markdown("""
-    <div class="app-header" style="background: linear-gradient(135deg, #6A4C93 0%, #9B72CF 60%, #C9A9E9 100%);">
-        <h1>🎪 Playground TnT Dashboard</h1>
-        <p>Performance Insight — Playground Twist N' Turns</p>
-    </div>
-    """, unsafe_allow_html=True)
 
     df = db.get_playground_data()
     if df.empty:
@@ -3449,14 +3470,8 @@ def page_dashboard_playground():
 # ============================================================================
 def page_master_dashboard():
     render_header()
+    render_page_head("Master Dashboard", "Konsolidasi seluruh tenant F&B dan Playground")
     db = get_db()
-
-    st.markdown("""
-    <div class="app-header" style="background: linear-gradient(135deg, #0B1D14 0%, #1B4332 40%, #D4A843 100%);">
-        <h1>🏠 Master Dashboard</h1>
-        <p>Consolidated View — All Tenant F&B + Playground TnT</p>
-    </div>
-    """, unsafe_allow_html=True)
 
     df_fnb = db.get_sales_data()
     df_pg = db.get_playground_data()
