@@ -569,7 +569,16 @@ def apply_custom_css():
       --r:18px;
     }
     .stApp{background:var(--bg)}
-    .main .block-container{padding:14px 18px 40px;max-width:1240px}
+    /* Streamlit 1.45 names this container by testid; ".main .block-container"
+       never matched, so neither the padding nor the max-width was ever
+       applied -- which is why the page stretched edge to edge on a wide
+       screen. Both selectors are kept so this survives either naming. */
+    /* Top padding clears the fixed 60px header. At 1.6rem the first card began
+       at y=50 and sat beneath it, which on Streamlit Cloud means underneath the
+       Share and Deploy buttons -- the overlap visible in the deployed app but
+       never in a local run, because a local run has no Cloud toolbar. */
+    [data-testid="stMainBlockContainer"],
+    .main .block-container{padding:4.75rem 1.6rem 3rem!important;max-width:1280px}
     html,body,[class*="css"]{
       font-family:ui-rounded,"SF Pro Rounded","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
     }
@@ -583,7 +592,11 @@ def apply_custom_css():
        (overlapping), 1rem -> 0, 1.5rem -> +8px clear. */
     [data-testid="stVerticalBlock"]{gap:1.5rem}
     [data-testid="stHorizontalBlock"]{gap:.75rem}
-    header[data-testid="stHeader"]{background:transparent;height:0}
+    /* The header is position:fixed and carries the Cloud toolbar. Made
+       transparent and zero-height it stopped masking anything, so scrolled
+       content showed straight through the Share/Deploy buttons and read as
+       overlapping. It keeps the canvas colour and its height instead. */
+    header[data-testid="stHeader"]{background:var(--bg)}
     footer{display:none}
 
     /* ---------------- sidebar as a floating white panel ---------------- */
