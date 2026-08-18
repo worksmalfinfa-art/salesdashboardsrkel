@@ -35,7 +35,9 @@ pio.templates["grove"] = go.layout.Template(
         # The title owns the top margin, the legend the bottom one. Both used to
         # sit at x=0 directly above the plot, so any chart with a legend drew
         # its title straight through the swatches.
-        margin=dict(t=58, b=48, l=54, r=18),
+        # Titles now live above the chart as HTML headings, so the top
+        # margin only has to clear the legend.
+        margin=dict(t=34, b=48, l=54, r=18),
         title=dict(font=dict(size=13.5, color="#131715"), x=0, xanchor="left",
                    y=0.98, yanchor="top"),
         xaxis=dict(showgrid=False, zeroline=False, linecolor="#EBECE8",
@@ -379,10 +381,36 @@ class SupabaseDB:
 
     def append_sales_data(self, rows):
         records = [dict(zip(self._SALES_COLS, r)) for r in rows]
-        # Upsert on the (tenant, date, hour) unique constraint: re-uploading a
-        # corrected file refreshes those slots instead of duplicating them.
-        self._insert_chunked("sales_data", records,
+        # Collapse repeats of the same slot inside one file before sending.
+        # Postgres refuses an upsert that touches the same key twice ("ON
+        # CONFLICT DO UPDATE command cannot affect row a second time"), and an
+        # ESB export can legitimately split one hour over several rows when the
+        # branch records more than one sales type. Those are separate real
+        # sales in the same hour, so they add up rather than overwrite.
+        merged = {}
+        for rec in records:
+            key = (rec["tenant_id"], rec["sales_date"], rec["sales_hour"])
+            if key in merged:
+                for f in ("pax_total", "subtotal", "discount_total", "nett_sales"):
+                    merged[key][f] += rec[f]
+            else:
+                merged[key] = dict(rec)
+        # Upsert on the (tenant, date, hour) unique constraint. Re-uploading the
+        # same file therefore rewrites those slots with identical values instead
+        # of appending a second copy -- the behaviour the Sheets version lacked,
+        # where every upload simply appended and a repeat doubled the day.
+        self._insert_chunked("sales_data", list(merged.values()),
                              on_conflict="tenant_id,sales_date,sales_hour")
+
+    def count_existing_slots(self, tenant_id, rows):
+        """How many (date, hour) slots in this file the tenant already has.
+        Lets the upload screen say what will be overwritten before it happens."""
+        df = _fetch_table("sales_data")
+        if df.empty or "tenant_id" not in df.columns: return 0
+        have = {(str(r["sales_date"])[:10], str(r["sales_hour"]))
+                for _, r in df[df["tenant_id"] == tenant_id].iterrows()}
+        incoming = {(str(r["sales_date"])[:10], str(r["sales_hour"])) for r in rows}
+        return len(have & incoming)
 
     def get_existing_keys(self, tenant_id):
         df = _fetch_table("sales_data")
@@ -610,6 +638,8 @@ def apply_custom_css():
     .cardmark{display:none}
     .box.dark{background:var(--g900);border-color:var(--g900);color:#fff}
     .box h3{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+    .chart-title{font-size:13px;font-weight:700;color:var(--ink);letter-spacing:-.01em;
+      margin:6px 0 -4px}
     .box.dark h3{color:#fff}
     .kpi .lb{display:flex;justify-content:space-between;align-items:center;gap:8px;
       font-size:12.5px;font-weight:600;color:var(--ink-2)}
@@ -786,6 +816,30 @@ def gauge_html(pct, label):
       </svg>
       <div class="val"><b class="num">{p*100:.0f}%</b><small>{label}</small></div>
     </div></div>"""
+
+
+def show_chart(fig, **kw):
+    """
+    Render a chart with its title lifted out of the plot.
+
+    A Plotly title lives inside the figure's top margin, which is the same
+    strip the legend occupies -- the two collided on every chart that had
+    both. Promoting the title to a real heading above the chart removes the
+    conflict at the source rather than tuning coordinates against it, and the
+    heading then matches the card titles around it instead of being styled by
+    the plotting library.
+    """
+    title = None
+    try:
+        title = fig.layout.title.text
+    except Exception:
+        pass
+    if title:
+        fig.update_layout(title=None)
+        st.markdown(f'<div class="chart-title">{title}</div>', unsafe_allow_html=True)
+    kw.setdefault("use_container_width", True)
+    kw.setdefault("config", {"displayModeBar": False})
+    st.plotly_chart(fig, **kw)
 
 
 def fmt_rp(val):
@@ -2213,7 +2267,7 @@ def page_dashboard_fnb():
                           legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1), **PLT)
         fig.update_yaxes(title_text="Nett Sales (Rp)", secondary_y=False)
         fig.update_yaxes(title_text="Pax", secondary_y=True)
-        st.plotly_chart(fig, use_container_width=True)
+        show_chart(fig, use_container_width=True)
 
         wd_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
         wd = df.groupby("weekday").agg(avg_s=("nett_sales","mean"), avg_p=("pax_total","mean")).reindex(wd_order).reset_index()
@@ -2223,13 +2277,13 @@ def page_dashboard_fnb():
                            color="avg_s", color_continuous_scale=["#DCEEE4","#103D28"], **PLT)
             fig_w.update_layout(height=460, showlegend=False, coloraxis_showscale=False)
             clean_hover(fig_w, prefix='Rp ')
-            st.plotly_chart(fig_w, use_container_width=True)
+            show_chart(fig_w, use_container_width=True)
         with c2:
             fig_w2 = px.bar(wd, x="weekday", y="avg_p", title="Rata-rata pax per hari",
                             color="avg_p", color_continuous_scale=["#FFF3CD","#C08A2C"], **PLT)
             fig_w2.update_layout(height=460, showlegend=False, coloraxis_showscale=False)
             clean_hover(fig_w2, suffix=' pax')
-            st.plotly_chart(fig_w2, use_container_width=True)
+            show_chart(fig_w2, use_container_width=True)
 
     # === TAB 2: ANALISIS PER JAM (WD vs WE) ===
     with tab2:
@@ -2243,7 +2297,7 @@ def page_dashboard_fnb():
             fig_tr.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
             fig_tr.update_layout(height=460, showlegend=False)
             clean_hover(fig_tr, suffix=' pax')
-            st.plotly_chart(fig_tr, use_container_width=True)
+            show_chart(fig_tr, use_container_width=True)
         with c2:
             traffic_s = df.groupby("day_type")["nett_sales"].sum().reset_index()
             traffic_s.columns = ["Day Type", "Sales"]
@@ -2253,7 +2307,7 @@ def page_dashboard_fnb():
             fig_ts.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=14)
             fig_ts.update_layout(height=460, showlegend=False)
             clean_hover(fig_ts, prefix='Rp ')
-            st.plotly_chart(fig_ts, use_container_width=True)
+            show_chart(fig_ts, use_container_width=True)
 
         hr_wd = df.groupby(["hr","day_type"])["pax_total"].sum().reset_index()
         hr_wd["lbl"] = hr_wd["hr"].apply(lambda x: f"{x:02d}:00")
@@ -2264,7 +2318,7 @@ def page_dashboard_fnb():
         fig_h.update_traces(textposition="outside", textfont_size=13)
         fig_h.update_layout(height=550, legend=dict(orientation="h",yanchor="bottom",y=1.02))
         clean_hover(fig_h, suffix=' pax')
-        st.plotly_chart(fig_h, use_container_width=True)
+        show_chart(fig_h, use_container_width=True)
 
         hm = df.groupby(["weekday","hr"])["nett_sales"].sum().reset_index()
         hm_piv = hm.pivot(index="weekday", columns="hr", values="nett_sales").fillna(0)
@@ -2273,7 +2327,7 @@ def page_dashboard_fnb():
                            color_continuous_scale=["#DCEEE4","#103D28"],
                            labels=dict(x="Jam",y="Hari",color="Sales"), **PLT)
         fig_hm.update_layout(height=460)
-        st.plotly_chart(fig_hm, use_container_width=True)
+        show_chart(fig_hm, use_container_width=True)
 
     # === TAB 3: PERBANDINGAN TENANT ===
     with tab3:
@@ -2292,18 +2346,18 @@ def page_dashboard_fnb():
                 fig_t.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=14)
                 fig_t.update_layout(height=520, showlegend=False)
                 clean_hover(fig_t, prefix='Rp ')
-                st.plotly_chart(fig_t, use_container_width=True)
+                show_chart(fig_t, use_container_width=True)
             with c2:
                 fig_p = px.pie(ta, values="ts", names="tenant_name", title="Kontribusi sales per tenant",
                                color_discrete_sequence=CHART_PALETTE, hole=0.4, **PLT)
                 fig_p.update_layout(height=520)
-                st.plotly_chart(fig_p, use_container_width=True)
+                show_chart(fig_p, use_container_width=True)
             td = df.groupby(["date_only","tenant_name"])["nett_sales"].sum().reset_index()
             td.columns = ["Tanggal","Tenant","Nett Sales"]
             fig_td = px.line(td, x="Tanggal", y="Nett Sales", color="Tenant",
                              title="Daily trend per tenant", color_discrete_sequence=CHART_PALETTE, **PLT)
             fig_td.update_layout(height=500)
-            st.plotly_chart(fig_td, use_container_width=True)
+            show_chart(fig_td, use_container_width=True)
         else:
             st.info("\U0001f4ca Perbandingan tenant tersedia setelah ada data dari lebih dari 1 tenant.")
 
@@ -2321,7 +2375,7 @@ def page_dashboard_fnb():
         fig_sp.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
         fig_sp.update_layout(height=520, legend=dict(orientation="h",yanchor="bottom",y=1.02))
         clean_hover(fig_sp, suffix=' pax')
-        st.plotly_chart(fig_sp, use_container_width=True)
+        show_chart(fig_sp, use_container_width=True)
 
         st.divider()
 
@@ -2341,7 +2395,7 @@ def page_dashboard_fnb():
                 fig_px2.update_traces(textposition="outside", textfont_size=14)
                 fig_px2.update_layout(height=460, legend=dict(orientation="h",yanchor="bottom",y=1.02))
                 clean_hover(fig_px2, suffix=' pax')
-                st.plotly_chart(fig_px2, use_container_width=True)
+                show_chart(fig_px2, use_container_width=True)
 
                 sales_agg = seg_filtered.groupby(["tenant_name","week_label"])["nett_sales"].sum().reset_index()
                 fig_sx = px.bar(sales_agg, x="tenant_name", y="nett_sales", color="week_label",
@@ -2351,7 +2405,7 @@ def page_dashboard_fnb():
                 fig_sx.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=14)
                 fig_sx.update_layout(height=460, legend=dict(orientation="h",yanchor="bottom",y=1.02))
                 clean_hover(fig_sx, prefix='Rp ')
-                st.plotly_chart(fig_sx, use_container_width=True)
+                show_chart(fig_sx, use_container_width=True)
 
                 st.markdown("---")
         else:
@@ -2368,7 +2422,7 @@ def page_dashboard_fnb():
             fig_ws.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
             fig_ws.update_layout(height=580, legend=dict(orientation="h",yanchor="bottom",y=1.02))
             clean_hover(fig_ws, prefix='Rp ')
-            st.plotly_chart(fig_ws, use_container_width=True)
+            show_chart(fig_ws, use_container_width=True)
 
         st.divider()
         st.subheader("\U0001f4cb Detail Week Sales per Tenant")
@@ -2401,7 +2455,7 @@ def page_dashboard_fnb():
                     fig_d.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
                     fig_d.update_layout(height=520, showlegend=False, margin=dict(t=40,b=10))
                     clean_hover(fig_d, prefix='Rp ')
-                    st.plotly_chart(fig_d, use_container_width=True)
+                    show_chart(fig_d, use_container_width=True)
                     st.markdown(f"""
                     <div style="text-align:center; padding:0.5rem; background:#F5F5DC; border-radius:8px; margin-top:-0.5rem;">
                         <div style="font-size:0.7rem; color:#666;">AVERAGE SALES</div>
@@ -2419,7 +2473,7 @@ def page_dashboard_fnb():
         fig_mt.update_layout(height=max(400, len(monthly)*80), yaxis=dict(autorange="reversed"),
                              xaxis_title="Transactions", yaxis_title="")
         clean_hover(fig_mt, suffix=' pax')
-        st.plotly_chart(fig_mt, use_container_width=True)
+        show_chart(fig_mt, use_container_width=True)
 
         if df["tenant_name"].nunique() > 1:
             mt_tenant = df.groupby(["month","tenant_name"])["nett_sales"].sum().reset_index()
@@ -2428,7 +2482,7 @@ def page_dashboard_fnb():
             fig_mtt.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
             fig_mtt.update_layout(height=550, legend=dict(orientation="h",yanchor="bottom",y=1.02))
             clean_hover(fig_mtt, prefix='Rp ')
-            st.plotly_chart(fig_mtt, use_container_width=True)
+            show_chart(fig_mtt, use_container_width=True)
 
         for _, row in monthly.iterrows():
             st.markdown(f"""
@@ -2456,14 +2510,14 @@ def page_dashboard_fnb():
             fig_ma.add_trace(go.Scatter(x=dma["Tanggal"], y=dma["MA_14"], name="MA 14-day",
                                         mode="lines", line=dict(color=COLORS["primary"],width=2.5)))
             fig_ma.update_layout(title="Moving average analysis", height=500, **PLT)
-            st.plotly_chart(fig_ma, use_container_width=True)
+            show_chart(fig_ma, use_container_width=True)
         with c2:
             dd = df.groupby("date_only").agg(disc=("discount_total","sum"), sales=("nett_sales","sum"), pax=("pax_total","sum")).reset_index()
             dd.columns = ["Tanggal","Discount","Sales","Pax"]
             fig_sc = px.scatter(dd, x="Discount", y="Sales", size="Pax", title="Discount vs sales impact",
                                 color="Pax", color_continuous_scale=["#DCEEE4","#103D28"], **PLT)
             fig_sc.update_layout(height=500)
-            st.plotly_chart(fig_sc, use_container_width=True)
+            show_chart(fig_sc, use_container_width=True)
 
         st.subheader("\U0001f4cb Tabel ringkasan statistik")
         sdf = df.groupby("tenant_name").agg(
@@ -2559,6 +2613,19 @@ def page_upload_esb():
                         ]
 
                         st.markdown(f"**Tenant:** {tenant_name} · **Data:** {len(branch_rows)} baris")
+
+                        # Say what a repeat upload will do before it happens.
+                        # The Sheets version appended blindly, so re-uploading a
+                        # day doubled it; here the slots are rewritten, but the
+                        # user should still see how many are affected.
+                        overlap = db.count_existing_slots(tenant_id, branch_rows)
+                        if overlap:
+                            st.warning(
+                                f"**{overlap:,} dari {len(branch_rows):,} baris** sudah ada "
+                                f"di database untuk tenant ini pada tanggal dan jam yang sama. "
+                                f"Baris tersebut akan **ditimpa**, bukan ditambahkan — "
+                                f"jadi total penjualan tidak akan berlipat."
+                            )
 
                         preview = pd.DataFrame(branch_rows[:5])
                         st.dataframe(preview, use_container_width=True, hide_index=True)
@@ -2729,7 +2796,7 @@ def page_performance():
                               paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                               yaxis=dict(visible=False), showlegend=False, bargap=.4,
                               xaxis=dict(showgrid=False, tickfont=dict(size=11, color="#8B948D")))
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig, use_container_width=True, config={"displayModeBar": False})
             st.markdown('<p class="foot" style="margin:0">Bar pekat menandai hari di atas '
                         'rata-rata, bar diarsir di bawahnya.</p>', unsafe_allow_html=True)
 
@@ -3314,7 +3381,7 @@ def page_dashboard_playground():
         fig.update_yaxes(title_text="Revenue (Rp)",secondary_y=False)
         fig.update_yaxes(title_text="Transaksi",secondary_y=True)
         clean_hover(fig, prefix="Rp ")
-        st.plotly_chart(fig, use_container_width=True)
+        show_chart(fig, use_container_width=True)
 
         wd_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
         wd = df.groupby("weekday")["amount"].mean().reindex(wd_order).fillna(0).reset_index()
@@ -3323,7 +3390,7 @@ def page_dashboard_playground():
                         color="Avg",color_continuous_scale=["#DCEEE4","#1A6B3F"],**PLT)
         fig_wd.update_layout(height=460,showlegend=False,coloraxis_showscale=False)
         clean_hover(fig_wd, prefix="Rp ")
-        st.plotly_chart(fig_wd, use_container_width=True)
+        show_chart(fig_wd, use_container_width=True)
 
     # TAB 2: CHILD & COMPANION
     with tab2:
@@ -3333,21 +3400,21 @@ def page_dashboard_playground():
             fig_vc = px.pie(visitor_data,values="Jumlah",names="Tipe",title="Komposisi Pengunjung",
                             color_discrete_sequence=["#1A6B3F","#C08A2C"],hole=0.4,**PLT)
             fig_vc.update_layout(height=460)
-            st.plotly_chart(fig_vc, use_container_width=True)
+            show_chart(fig_vc, use_container_width=True)
         with c2:
             daily_v = df.groupby("date_only").agg(child=("child_total","sum"),comp=("companion_total","sum")).reset_index()
             fig_v = go.Figure()
             fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["child"],name="Anak",marker_color="#1A6B3F"))
             fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["comp"],name="Pendamping",marker_color="#C08A2C"))
             fig_v.update_layout(title="Daily Child vs Companion",barmode="stack",height=460,**PLT)
-            st.plotly_chart(fig_v, use_container_width=True)
+            show_chart(fig_v, use_container_width=True)
 
         # Avg child per transaction distribution
         fig_dist = px.histogram(df,x="child_total",title="Distribusi Jumlah Anak per Transaksi",
                                 nbins=int(max(df["child_total"].max(),10)),color_discrete_sequence=["#1A6B3F"],
                                 labels={"child_total":"Jumlah Anak","count":"Frekuensi"},**PLT)
         fig_dist.update_layout(height=460)
-        st.plotly_chart(fig_dist, use_container_width=True)
+        show_chart(fig_dist, use_container_width=True)
 
         # Customer frequency
         st.subheader("🔄 Top Repeat Customers")
@@ -3367,7 +3434,7 @@ def page_dashboard_playground():
                             text="revenue",**PLT)
             fig_tr.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
             fig_tr.update_layout(height=460,showlegend=False)
-            st.plotly_chart(fig_tr, use_container_width=True)
+            show_chart(fig_tr, use_container_width=True)
         with c2:
             trf_c = df.groupby("day_type")["child_total"].sum().reset_index()
             fig_tc = px.bar(trf_c,x="day_type",y="child_total",title="Total Anak — Weekday vs Weekend",
@@ -3375,7 +3442,7 @@ def page_dashboard_playground():
                             text="child_total",**PLT)
             fig_tc.update_traces(textposition="outside",texttemplate="%{text:,}",textfont_size=14)
             fig_tc.update_layout(height=460,showlegend=False)
-            st.plotly_chart(fig_tc, use_container_width=True)
+            show_chart(fig_tc, use_container_width=True)
 
         # Heatmap weekday
         daily_wd = df.groupby(["weekday","date_only"]).agg(rev=("amount","sum")).reset_index()
@@ -3387,7 +3454,7 @@ def page_dashboard_playground():
         fig_cb.add_trace(go.Scatter(x=combo["Hari"],y=combo["Avg Anak"],name="Avg Anak",
                                     mode="lines+markers",line=dict(color="#C08A2C",width=2.5)),secondary_y=True)
         fig_cb.update_layout(title="Avg Revenue & Anak per Hari",height=460,**PLT)
-        st.plotly_chart(fig_cb, use_container_width=True)
+        show_chart(fig_cb, use_container_width=True)
 
     # TAB 4: WEEKLY REPORT
     with tab4:
@@ -3398,7 +3465,7 @@ def page_dashboard_playground():
         fig_wk.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
         fig_wk.update_layout(height=520)
         clean_hover(fig_wk, prefix="Rp ")
-        st.plotly_chart(fig_wk, use_container_width=True)
+        show_chart(fig_wk, use_container_width=True)
 
         # Weekly detail Senin-Minggu
         st.subheader("📋 Detail Harian per Minggu")
@@ -3414,7 +3481,7 @@ def page_dashboard_playground():
                         text="Revenue",color_discrete_sequence=["#2E9160"],**PLT)
         fig_dd.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
         fig_dd.update_layout(height=460)
-        st.plotly_chart(fig_dd, use_container_width=True)
+        show_chart(fig_dd, use_container_width=True)
 
     # TAB 5: MONTHLY OVERVIEW
     with tab5:
@@ -3426,13 +3493,13 @@ def page_dashboard_playground():
                             color_discrete_sequence=["#1A6B3F"],**PLT)
             fig_mr.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
             fig_mr.update_layout(height=460)
-            st.plotly_chart(fig_mr, use_container_width=True)
+            show_chart(fig_mr, use_container_width=True)
         with c2:
             fig_mc = px.bar(mt,x="month",y="child",title="Total Anak per Bulan",text="child",
                             color_discrete_sequence=["#C08A2C"],**PLT)
             fig_mc.update_traces(textposition="outside",texttemplate="%{text:,}",textfont_size=13)
             fig_mc.update_layout(height=460)
-            st.plotly_chart(fig_mc, use_container_width=True)
+            show_chart(fig_mc, use_container_width=True)
 
         for _,row in mt.iterrows():
             st.markdown(f"""
@@ -3457,14 +3524,14 @@ def page_dashboard_playground():
             fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_7"],name="MA 7-day",mode="lines",line=dict(color="#2E9160",width=2.5)))
             fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_14"],name="MA 14-day",mode="lines",line=dict(color="#1A6B3F",width=2.5)))
             fig_ma.update_layout(title="Moving Average Analysis",height=500,**PLT)
-            st.plotly_chart(fig_ma, use_container_width=True)
+            show_chart(fig_ma, use_container_width=True)
         with c2:
             fig_sc = px.scatter(df,x="child_total",y="amount",size="companion_total",
                                 title="Children vs Revenue per Transaction",
                                 color="companion_total",color_continuous_scale=["#DCEEE4","#1A6B3F"],
                                 labels={"child_total":"Jumlah Anak","amount":"Revenue (Rp)","companion_total":"Pendamping"},**PLT)
             fig_sc.update_layout(height=500)
-            st.plotly_chart(fig_sc, use_container_width=True)
+            show_chart(fig_sc, use_container_width=True)
 
         st.subheader("📋 Ringkasan Statistik")
         stats_data = {
@@ -3558,13 +3625,13 @@ def page_master_dashboard():
             fig_pie = px.pie(contrib,values="Revenue",names="Segment",title="Kontribusi Revenue — F&B vs Playground",
                              color_discrete_sequence=["#1A6B3F","#1A6B3F"],hole=0.4,**PLT)
             fig_pie.update_layout(height=460)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            show_chart(fig_pie, use_container_width=True)
         with c2:
             fig_bar = px.bar(contrib,x="Segment",y="Revenue",title="Total Revenue per Segment",
                              text="Revenue",color="Segment",color_discrete_map={"F&B Tenants":"#1A6B3F","Playground TnT":"#1A6B3F"},**PLT)
             fig_bar.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
             fig_bar.update_layout(height=460,showlegend=False)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            show_chart(fig_bar, use_container_width=True)
 
         # Tenant breakdown including playground
         if not fnb_empty:
@@ -3580,7 +3647,7 @@ def page_master_dashboard():
                          text="Revenue",color_discrete_sequence=CHART_PALETTE+["#1A6B3F"],**PLT)
         fig_all.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=12)
         fig_all.update_layout(height=520,showlegend=False)
-        st.plotly_chart(fig_all, use_container_width=True)
+        show_chart(fig_all, use_container_width=True)
 
     # TAB 2: DAILY COMPARISON
     with tab2:
@@ -3595,14 +3662,14 @@ def page_master_dashboard():
         fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",marker_color="#1A6B3F"))
         fig_dl.add_trace(go.Bar(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",marker_color="#1A6B3F"))
         fig_dl.update_layout(title="Daily Revenue — F&B vs Playground",barmode="stack",height=520,**PLT)
-        st.plotly_chart(fig_dl, use_container_width=True)
+        show_chart(fig_dl, use_container_width=True)
 
         fig_ln = go.Figure()
         fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["F&B"],name="F&B",line=dict(color="#1A6B3F",width=2.5)))
         fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Playground"],name="Playground",line=dict(color="#1A6B3F",width=2.5)))
         fig_ln.add_trace(go.Scatter(x=merged["date"].astype(str),y=merged["Total"],name="Total",line=dict(color="#C08A2C",width=3,dash="dash")))
         fig_ln.update_layout(title="Daily Revenue Trend Comparison",height=520,**PLT)
-        st.plotly_chart(fig_ln, use_container_width=True)
+        show_chart(fig_ln, use_container_width=True)
 
     # TAB 3: MONTHLY COMPARISON
     with tab3:
@@ -3617,7 +3684,7 @@ def page_master_dashboard():
         fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["F&B"],name="F&B",marker_color="#1A6B3F"))
         fig_mb.add_trace(go.Bar(x=mt_merged["month"],y=mt_merged["Playground"],name="Playground",marker_color="#1A6B3F"))
         fig_mb.update_layout(title="Monthly Revenue — F&B vs Playground",barmode="group",height=520,**PLT)
-        st.plotly_chart(fig_mb, use_container_width=True)
+        show_chart(fig_mb, use_container_width=True)
 
         st.subheader("📋 Ringkasan Bulanan")
         mt_merged_display = mt_merged.copy()
