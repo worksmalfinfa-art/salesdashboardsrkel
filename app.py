@@ -20,44 +20,26 @@ from plotly.subplots import make_subplots
 # its card instead of on a white slab of its own; horizontal hairlines only,
 # since vertical rules add nothing to a time series; rounded bar caps to match
 # the card system; and muted axis type so the data outranks the furniture.
+# TailAdmin chart language: Outfit type, blue-family series, soft horizontal
+# hairlines, transparent ground so a chart sits on its white card.
 pio.templates["grove"] = go.layout.Template(
     layout=go.Layout(
-        colorway=["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E",
-                  "#7A5230", "#2E9160", "#9E6B4A"],
-        font=dict(family="ui-rounded, Segoe UI, system-ui, sans-serif",
-                  size=12, color="#4A524D"),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        # A share of the bar width, not a fixed pixel count: 8px turned the thin
-        # bars of a 30-day series into capsules while leaving wide bars barely
-        # rounded. A percentage behaves at both extremes.
+        colorway=["#465FFF", "#7A5AF8", "#0BA5EC", "#12B76A", "#F79009",
+                  "#EE46BC", "#6172F3", "#F04438"],
+        font=dict(family="Outfit, Segoe UI, system-ui, sans-serif",
+                  size=12, color="#667085"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         barcornerradius="10%",
-        # The title owns the top margin, the legend the bottom one. Both used to
-        # sit at x=0 directly above the plot, so any chart with a legend drew
-        # its title straight through the swatches.
-        # Titles now live above the chart as HTML headings, so the top
-        # margin only has to clear the legend.
         margin=dict(t=34, b=48, l=54, r=18),
-        title=dict(font=dict(size=13.5, color="#131715"), x=0, xanchor="left",
-                   y=0.98, yanchor="top"),
-        xaxis=dict(showgrid=False, zeroline=False, linecolor="#EBECE8",
-                   tickfont=dict(size=11, color="#8B948D"),
-                   title=dict(font=dict(size=11, color="#8B948D"))),
-        yaxis=dict(showgrid=True, gridcolor="#F1F2EF", zeroline=False,
-                   linecolor="rgba(0,0,0,0)",
-                   tickfont=dict(size=11, color="#8B948D"),
-                   title=dict(font=dict(size=11, color="#8B948D"))),
-        # Title left, legend right, both in the top margin. Separating them
-        # horizontally rather than vertically is what keeps them apart at any
-        # chart height -- legend y is a fraction of the plot area, so a bottom
-        # legend that clears the axis on a 300px chart is pushed past the
-        # margin and clipped on a 500px one.
+        xaxis=dict(showgrid=False, zeroline=False, linecolor="#E4E7EC",
+                   tickfont=dict(size=11, color="#667085")),
+        yaxis=dict(showgrid=True, gridcolor="#F2F4F7", zeroline=False,
+                   linecolor="rgba(0,0,0,0)", tickfont=dict(size=11, color="#667085")),
         legend=dict(orientation="h", yanchor="bottom", y=1.0, x=1, xanchor="right",
-                    font=dict(size=11), bgcolor="rgba(0,0,0,0)",
-                    itemsizing="constant"),
-        hoverlabel=dict(bgcolor="#131715", bordercolor="#131715",
+                    font=dict(size=11), bgcolor="rgba(0,0,0,0)", itemsizing="constant"),
+        hoverlabel=dict(bgcolor="#101828", bordercolor="#101828",
                         font=dict(size=12, color="#FFFFFF",
-                                  family="ui-rounded, Segoe UI, system-ui, sans-serif")),
+                                  family="Outfit, Segoe UI, sans-serif")),
         hovermode="closest",
     ))
 pio.templates.default = "plotly_white+grove"
@@ -93,14 +75,14 @@ ESB_COL_MAP = {
 }
 
 COLORS = {
-    "primary": "#103D28", "secondary": "#1A6B3F", "accent": "#2E9160",
-    "gold": "#C08A2C", "dark": "#0B140F", "light": "#DCEEE4",
-    "red": "#C0483C", "blue": "#3B4C7A", "orange": "#9E6B4A", "white": "#FFFFFF",
+    "primary": "#2A31D8", "secondary": "#465FFF", "accent": "#0BA5EC",
+    "gold": "#7A5AF8", "dark": "#101828", "light": "#DCEEE4",
+    "red": "#F04438", "blue": "#0BA5EC", "orange": "#F79009", "white": "#FFFFFF",
 }
 # One palette, defined once. Charts and tenant marks draw from the same list
 # so a brand keeps its hue whether it appears as a bar, a line or a square.
-TENANT_HUES = ["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E", "#7A5230",
-               "#2E9160", "#9E6B4A", "#4A6B7B", "#7B4A6B"]
+TENANT_HUES = ["#465FFF", "#7A5AF8", "#0BA5EC", "#12B76A", "#F79009",
+               "#EE46BC", "#6172F3", "#F04438", "#36BFFA", "#9E77ED"]
 CHART_PALETTE = TENANT_HUES
 
 ALLOWED_DOMAINS = ["srkel.id", "teamup.id"]
@@ -554,67 +536,78 @@ class PlaygroundParser:
 # ============================================================================
 def apply_custom_css():
     """
-    Colour, type and shape only.
+    TailAdmin design tokens on Streamlit primitives.
 
-    Everything structural -- containers, grids, spacing, heights -- is left to
-    Streamlit. The previous stylesheet fought it: raw HTML was injected for
-    cards, and Streamlit measures each markdown block in JavaScript without
-    seeing padding added inside, so every card reported 16px shorter than it
-    drew and sat on the element below. Patching that with guessed selectors and
-    negative margins moved the damage around instead of removing it. No rule
-    here sets position, height, or a negative margin.
+    Structure stays Streamlit's job -- that discipline is what finally made the
+    layout stable -- so nothing here sets position, height, or a negative
+    margin. This block carries identity only: canvas, cards, type, badges.
     """
     st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
     :root{
-      --bg:#EFEFEC; --card:#FFFFFF; --ink:#131715; --muted:#8B948D; --line:#E4E6E1;
-      --g900:#103D28; --g700:#1A6B3F; --g500:#2E9160; --g50:#EEF6F1;
-      --ochre:#C08A2C; --red:#C0483C;
+      --bg:#F9FAFB; --card:#FFFFFF; --line:#E4E7EC;
+      --ink:#101828; --muted:#667085;
+      --brand:#465FFF; --brand-50:#ECF3FF;
+      --up:#12B76A; --down:#F04438;
     }
     .stApp{background:var(--bg)}
-    html,body,[class*="css"],button,input,select{
-      font-family:ui-rounded,"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif}
+    html,body,[class*="css"],button,input,select,textarea{
+      font-family:'Outfit',"Segoe UI",system-ui,sans-serif!important}
     header[data-testid="stHeader"]{background:var(--bg)}
 
-    /* Cards: Streamlit's own bordered container, restyled. Because Streamlit
-       creates and measures it, it can never disagree with its contents. */
     [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]){
-      background:var(--card);border-color:var(--line);border-radius:16px}
+      background:var(--card);border:1px solid var(--line);border-radius:16px}
 
     [data-testid="stMetricValue"]{
-      font-size:1.7rem;font-weight:700;color:var(--ink);
-      font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-    [data-testid="stMetricLabel"]{font-size:.8rem;color:var(--muted);font-weight:600}
-    [data-testid="stMetricDelta"]{font-size:.78rem}
+      font-size:1.8rem;font-weight:700;color:var(--ink);
+      font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+    [data-testid="stMetricLabel"]{font-size:.8rem;color:var(--muted);font-weight:500}
+    /* Delta as a TailAdmin badge pill; direction colour stays Streamlit's. */
+    [data-testid="stMetricDelta"]{
+      font-size:.74rem;font-weight:600;background:var(--bg);
+      border-radius:999px;padding:2px 8px;width:fit-content}
 
-    h1,h2,h3,h4{color:var(--ink);letter-spacing:-.02em}
-    h1{font-size:1.7rem!important;font-weight:800}
-    h2{font-size:1.2rem!important;font-weight:700}
-    h3{font-size:1rem!important;font-weight:700}
+    h1,h2,h3,h4,h5,h6{color:var(--ink);letter-spacing:-.02em;font-family:'Outfit',sans-serif}
+    h1{font-size:1.55rem!important;font-weight:700}
+    h2{font-size:1.15rem!important;font-weight:700}
     .stCaption,[data-testid="stCaptionContainer"]{color:var(--muted)}
 
     section[data-testid="stSidebar"]{background:var(--card);border-right:1px solid var(--line)}
     section[data-testid="stSidebar"] [role="radiogroup"] label{
-      padding:6px 10px;border-radius:10px;font-size:.86rem}
+      padding:7px 12px;border-radius:10px;font-size:.86rem;color:var(--muted)}
     section[data-testid="stSidebar"] [role="radiogroup"] label:hover{background:var(--bg)}
     section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){
-      background:var(--g50);font-weight:700}
+      background:var(--brand-50);font-weight:600}
+    section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p{color:var(--brand)}
     section[data-testid="stSidebar"] [role="radiogroup"] input{display:none}
 
     .stTabs [data-baseweb="tab-list"]{gap:2px;border-bottom:1px solid var(--line)}
-    .stTabs [data-baseweb="tab"]{font-size:.86rem;font-weight:600;color:var(--muted)}
-    .stTabs [aria-selected="true"]{color:var(--ink)!important}
+    .stTabs [data-baseweb="tab"]{font-size:.86rem;font-weight:500;color:var(--muted)}
+    .stTabs [aria-selected="true"]{color:var(--brand)!important;font-weight:600}
+    .stTabs [data-baseweb="tab-highlight"]{background-color:var(--brand)}
+
+    /* Segmented period control (horizontal radio inside main-area cards). */
+    [data-testid="stMain"] .stRadio [role="radiogroup"]{gap:4px}
+    [data-testid="stMain"] .stRadio [role="radiogroup"] label{
+      border:1px solid var(--line);border-radius:8px;padding:3px 12px;font-size:.8rem}
+    [data-testid="stMain"] .stRadio [role="radiogroup"] label:has(input:checked){
+      background:var(--brand);border-color:var(--brand)}
+    [data-testid="stMain"] .stRadio [role="radiogroup"] label:has(input:checked) p{color:#fff}
+    [data-testid="stMain"] .stRadio input{display:none}
+
     .stButton button,.stDownloadButton button{
-      border-radius:9px;font-weight:600;font-size:.85rem;border:1px solid var(--line)}
+      border-radius:10px;font-weight:600;font-size:.85rem;border:1px solid var(--line)}
     .stDataFrame{font-variant-numeric:tabular-nums}
     </style>
     """, unsafe_allow_html=True)
 
-
-TENANT_HUES = ["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E", "#7A5230",
-               "#2E9160", "#9E6B4A", "#4A6B7B", "#7B4A6B"]
+TENANT_HUES = ["#465FFF", "#7A5AF8", "#0BA5EC", "#12B76A", "#F79009",
+               "#EE46BC", "#6172F3", "#F04438", "#36BFFA", "#9E77ED"]
 CHART_PALETTE = TENANT_HUES
-GREEN, GREEN_D, OCHRE, FLAT = "#1A6B3F", "#103D28", "#C08A2C", "#F0F1EE"
+# Names kept so ~30 call sites need no edit; values are TailAdmin brand
+# blue, dark blue, violet and grey-50.
+GREEN, GREEN_D, OCHRE, FLAT = "#465FFF", "#2A31D8", "#7A5AF8", "#F2F4F7"
 
 
 def tenant_hue(tenant_id, name=""):
@@ -1369,9 +1362,9 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     daily = df.groupby("date_only").agg(nett=("nett_sales","sum"), pax=("pax_total","sum")).reset_index()
     fig1 = make_subplots(specs=[[{"secondary_y":True}]])
     fig1.add_trace(go.Bar(x=daily["date_only"].astype(str), y=daily["nett"], name="Nett Sales",
-                          marker_color="#1A6B3F", opacity=0.85), secondary_y=False)
+                          marker_color="#465FFF", opacity=0.85), secondary_y=False)
     fig1.add_trace(go.Scatter(x=daily["date_only"].astype(str), y=daily["pax"], name="Pax",
-                              mode="lines+markers", line=dict(color="#C08A2C",width=2.5)), secondary_y=True)
+                              mode="lines+markers", line=dict(color="#7A5AF8",width=2.5)), secondary_y=True)
     fig1.update_layout(title="Daily Sales & Pax Trend", hovermode="x unified", **chart_layout)
     fig1.update_yaxes(title_text="Nett Sales (Rp)", secondary_y=False)
     fig1.update_yaxes(title_text="Pax", secondary_y=True)
@@ -1381,7 +1374,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     wd = df.groupby("weekday")["nett_sales"].mean().reindex(wd_order).fillna(0).reset_index()
     wd.columns = ["Day","Avg"]
     fig_wd = px.bar(wd, x="Day", y="Avg", title="Rata-rata Sales per Hari",
-                    color="Avg", color_continuous_scale=["#DCEEE4","#103D28"],
+                    color="Avg", color_continuous_scale=["#DCEEE4","#2A31D8"],
                     labels={"Day":"Hari","Avg":"Avg Sales (Rp)"})
     fig_wd.update_layout(showlegend=False, coloraxis_showscale=False, **chart_layout)
     add_chart(fig_wd)
@@ -1391,7 +1384,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     hr_wd["lbl"] = hr_wd["hr"].apply(lambda x: f"{x:02d}:00")
     fig_h = px.bar(hr_wd, x="lbl", y="pax_total", color="day_type", barmode="group",
                    title="Transaction per Hour — Weekday vs Weekend",
-                   color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
+                   color_discrete_map={"Weekday":"#0BA5EC","Weekend":"#F04438"},
                    text="pax_total", labels={"lbl":"Jam","pax_total":"Pax","day_type":""})
     fig_h.update_traces(textposition="outside", textfont_size=11)
     fig_h.update_layout(**chart_layout)
@@ -1407,7 +1400,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     hm = df.groupby(["weekday","hr"])["nett_sales"].sum().reset_index()
     hm_piv = hm.pivot(index="weekday", columns="hr", values="nett_sales").fillna(0).reindex(wd_order)
     fig_hm = px.imshow(hm_piv, aspect="auto", title="Heatmap: Hari × Jam",
-                       color_continuous_scale=["#DCEEE4","#103D28"],
+                       color_continuous_scale=["#DCEEE4","#2A31D8"],
                        labels=dict(x="Jam",y="Hari",color="Sales (Rp)"))
     fig_hm.update_layout(**chart_layout)
     add_chart(fig_hm)
@@ -1441,7 +1434,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
         seg_order = ["Breakfast","Lunch","After Office"]
         fig_seg = px.bar(seg_pax, x="segment", y="pax_total", color="day_type", barmode="group",
                          title="Pax by Time Segment — Weekday vs Weekend",
-                         color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
+                         color_discrete_map={"Weekday":"#0BA5EC","Weekend":"#F04438"},
                          text="pax_total", category_orders={"segment":seg_order},
                          labels={"segment":"Segment","pax_total":"Pax","day_type":""})
         fig_seg.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=13)
@@ -1451,7 +1444,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
         seg_sales = seg_df2.groupby(["segment","day_type"])["nett_sales"].sum().reset_index()
         fig_ss = px.bar(seg_sales, x="segment", y="nett_sales", color="day_type", barmode="group",
                         title="Sales by Time Segment — Weekday vs Weekend",
-                        color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
+                        color_discrete_map={"Weekday":"#0BA5EC","Weekend":"#F04438"},
                         text="nett_sales", category_orders={"segment":seg_order},
                         labels={"segment":"Segment","nett_sales":"Sales (Rp)","day_type":""})
         fig_ss.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=12)
@@ -1462,7 +1455,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     wk = df.groupby(["tenant_name","week_label"])["nett_sales"].sum().reset_index()
     fig_wk = px.bar(wk, x="tenant_name", y="nett_sales", color="week_label", barmode="group",
                     title="Tenant Sales per Week", text="nett_sales",
-                    color_discrete_sequence=["#8A3730","#CC3333","#DAA520","#B8860B","#3B4C7A"],
+                    color_discrete_sequence=["#8A3730","#CC3333","#DAA520","#B8860B","#0BA5EC"],
                     labels={"tenant_name":"Tenant","nett_sales":"Sales (Rp)","week_label":""})
     fig_wk.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=10)
     fig_wk.update_layout(**{**chart_layout, "height": 550})
@@ -1497,7 +1490,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     add_chart(fig_mt, "6. Monthly Overview")
 
     fig_mp = px.bar(mt_tot, x="month", y="pax", title="Total Pax per Bulan",
-                    text="pax", color_discrete_sequence=["#1A6B3F"],
+                    text="pax", color_discrete_sequence=["#465FFF"],
                     labels={"month":"Bulan","pax":"Jumlah Pax"})
     fig_mp.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=13)
     fig_mp.update_layout(**chart_layout)
@@ -1512,15 +1505,15 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
     fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str), y=dma["Sales"], name="Daily",
                                 mode="lines", line=dict(color="#DCEEE4",width=1)))
     fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str), y=dma["MA_7"], name="MA 7-day",
-                                mode="lines", line=dict(color="#2E9160",width=2.5)))
+                                mode="lines", line=dict(color="#0BA5EC",width=2.5)))
     fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str), y=dma["MA_14"], name="MA 14-day",
-                                mode="lines", line=dict(color="#103D28",width=2.5)))
+                                mode="lines", line=dict(color="#2A31D8",width=2.5)))
     fig_ma.update_layout(title="Moving Average Analysis", xaxis_title="Tanggal", yaxis_title="Sales (Rp)", **chart_layout)
     add_chart(fig_ma, "7. Deep Dive")
 
     dd2 = df.groupby("date_only").agg(disc=("discount_total","sum"),sales=("nett_sales","sum"),pax=("pax_total","sum")).reset_index()
     fig_dsc = px.scatter(dd2, x="disc", y="sales", size="pax", title="Discount vs Sales Impact",
-                         color="pax", color_continuous_scale=["#DCEEE4","#103D28"],
+                         color="pax", color_continuous_scale=["#DCEEE4","#2A31D8"],
                          labels={"disc":"Discount (Rp)","sales":"Sales (Rp)","pax":"Pax"})
     fig_dsc.update_layout(**chart_layout)
     add_chart(fig_dsc)
@@ -1551,7 +1544,7 @@ def generate_dashboard_html(df, sel_tenant, date_start, date_end):
 * {{ font-family: ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ background: #fff; padding: 30px 40px; color: #333; max-width: 1100px; margin: 0 auto; }}
 .report-header {{
-    background: linear-gradient(135deg, #103D28, #1A6B3F, #2E9160);
+    background: linear-gradient(135deg, #2A31D8, #465FFF, #0BA5EC);
     color: white; padding: 24px 32px; border-radius: 12px; margin-bottom: 24px;
 }}
 .report-header h1 {{ font-size: 28px; font-weight: 800; margin-bottom: 4px; }}
@@ -1559,31 +1552,31 @@ body {{ background: #fff; padding: 30px 40px; color: #333; max-width: 1100px; ma
 .kpi-row {{ display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }}
 .kpi {{
     flex: 1; min-width: 160px; background: #fff; border-radius: 10px; padding: 16px;
-    border-left: 5px solid #1A6B3F; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    border-left: 5px solid #465FFF; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }}
-.kpi.gold {{ border-left-color: #C08A2C; }}
-.kpi.blue {{ border-left-color: #3B4C7A; }}
-.kpi.red {{ border-left-color: #C0483C; }}
-.kpi.orange {{ border-left-color: #9E6B4A; }}
+.kpi.gold {{ border-left-color: #7A5AF8; }}
+.kpi.blue {{ border-left-color: #0BA5EC; }}
+.kpi.red {{ border-left-color: #F04438; }}
+.kpi.orange {{ border-left-color: #F79009; }}
 .kpi-label {{ font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }}
-.kpi-value {{ font-size: 22px; font-weight: 800; color: #103D28; margin-top: 4px; }}
+.kpi-value {{ font-size: 22px; font-weight: 800; color: #2A31D8; margin-top: 4px; }}
 .section-title {{
-    font-size: 20px; font-weight: 700; color: #103D28;
-    border-bottom: 3px solid #2E9160; padding-bottom: 6px;
+    font-size: 20px; font-weight: 700; color: #2A31D8;
+    border-bottom: 3px solid #0BA5EC; padding-bottom: 6px;
     margin: 32px 0 16px;
 }}
 table {{ width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }}
-th {{ background: #103D28; color: white; padding: 10px 12px; text-align: left; }}
+th {{ background: #2A31D8; color: white; padding: 10px 12px; text-align: left; }}
 td {{ padding: 8px 12px; border-bottom: 1px solid #eee; }}
 tr:nth-child(even) {{ background: #f9f9f9; }}
 .page-break {{ page-break-after: auto; }}
 .print-btn {{
     position: fixed; top: 16px; right: 16px; z-index: 999;
-    background: #1A6B3F; color: white; border: none; padding: 12px 24px;
+    background: #465FFF; color: white; border: none; padding: 12px 24px;
     border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }}
-.print-btn:hover {{ background: #103D28; }}
+.print-btn:hover {{ background: #2A31D8; }}
 @media print {{
     .print-btn {{ display: none; }}
     body {{ padding: 10px; }}
@@ -1805,7 +1798,7 @@ def generate_playground_html(df, date_start, date_end):
 
     parts.append(f"""
     <div class="kpi-row">
-        <div class="kpi" style="border-left-color:#1A6B3F"><div class="kpi-label">Total Revenue</div><div class="kpi-value">Rp {t_amt:,.0f}</div></div>
+        <div class="kpi" style="border-left-color:#465FFF"><div class="kpi-label">Total Revenue</div><div class="kpi-value">Rp {t_amt:,.0f}</div></div>
         <div class="kpi gold"><div class="kpi-label">Transaksi</div><div class="kpi-value">{t_trx:,}</div></div>
         <div class="kpi blue"><div class="kpi-label">Total Anak</div><div class="kpi-value">{t_child:,}</div></div>
         <div class="kpi orange"><div class="kpi-label">Total Pendamping</div><div class="kpi-value">{t_comp:,}</div></div>
@@ -1815,37 +1808,37 @@ def generate_playground_html(df, date_start, date_end):
     # Trend
     daily=df.groupby("date_only").agg(amt=("amount","sum"),trx=("amount","count"),ch=("child_total","sum")).reset_index()
     f1=make_subplots(specs=[[{"secondary_y":True}]])
-    f1.add_trace(go.Bar(x=daily["date_only"].astype(str),y=daily["amt"],name="Revenue",marker_color="#1A6B3F",opacity=0.85),secondary_y=False)
-    f1.add_trace(go.Scatter(x=daily["date_only"].astype(str),y=daily["trx"],name="Transaksi",mode="lines+markers",line=dict(color="#C08A2C",width=2.5)),secondary_y=True)
+    f1.add_trace(go.Bar(x=daily["date_only"].astype(str),y=daily["amt"],name="Revenue",marker_color="#465FFF",opacity=0.85),secondary_y=False)
+    f1.add_trace(go.Scatter(x=daily["date_only"].astype(str),y=daily["trx"],name="Transaksi",mode="lines+markers",line=dict(color="#7A5AF8",width=2.5)),secondary_y=True)
     f1.update_layout(title="Daily Revenue & Transaction",**cl);ac(f1,"1. Trend Harian")
 
     # Child vs Companion
     vc=pd.DataFrame({"Tipe":["Anak","Pendamping"],"Jumlah":[t_child,t_comp]})
-    f2=px.pie(vc,values="Jumlah",names="Tipe",title="Komposisi Pengunjung",color_discrete_sequence=["#1A6B3F","#C08A2C"],hole=0.4)
+    f2=px.pie(vc,values="Jumlah",names="Tipe",title="Komposisi Pengunjung",color_discrete_sequence=["#465FFF","#7A5AF8"],hole=0.4)
     f2.update_layout(**cl);ac(f2,"2. Child & Companion")
 
     dv=df.groupby("date_only").agg(ch=("child_total","sum"),co=("companion_total","sum")).reset_index()
     f3=go.Figure()
-    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["ch"],name="Anak",marker_color="#1A6B3F"))
-    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["co"],name="Pendamping",marker_color="#C08A2C"))
+    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["ch"],name="Anak",marker_color="#465FFF"))
+    f3.add_trace(go.Bar(x=dv["date_only"].astype(str),y=dv["co"],name="Pendamping",marker_color="#7A5AF8"))
     f3.update_layout(title="Daily Child vs Companion",barmode="stack",**cl);ac(f3)
 
     # WD/WE
     trf=df.groupby("day_type").agg(rev=("amount","sum"),ch=("child_total","sum")).reset_index()
     f4=px.bar(trf,x="day_type",y="rev",title="Revenue — Weekday vs Weekend",color="day_type",
-              color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},text="rev")
+              color_discrete_map={"Weekday":"#0BA5EC","Weekend":"#F04438"},text="rev")
     f4.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
     f4.update_layout(showlegend=False,**cl);ac(f4,"3. Weekday vs Weekend")
 
     # Weekly
     wk=df.groupby("week_label").agg(rev=("amount","sum")).reset_index()
-    f5=px.bar(wk,x="week_label",y="rev",title="Revenue per Week",text="rev",color_discrete_sequence=["#1A6B3F"])
+    f5=px.bar(wk,x="week_label",y="rev",title="Revenue per Week",text="rev",color_discrete_sequence=["#465FFF"])
     f5.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
     f5.update_layout(**cl);ac(f5,"4. Weekly Report")
 
     # Monthly
     mt=df.groupby("month").agg(rev=("amount","sum"),ch=("child_total","sum")).reset_index().sort_values("month")
-    f6=px.bar(mt,x="month",y="rev",title="Revenue per Bulan",text="rev",color_discrete_sequence=["#1A6B3F"])
+    f6=px.bar(mt,x="month",y="rev",title="Revenue per Bulan",text="rev",color_discrete_sequence=["#465FFF"])
     f6.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
     f6.update_layout(**cl);ac(f6,"5. Monthly Overview")
 
@@ -1854,8 +1847,8 @@ def generate_playground_html(df, date_start, date_end):
     dma["MA7"]=dma["R"].rolling(7,min_periods=1).mean();dma["MA14"]=dma["R"].rolling(14,min_periods=1).mean()
     f7=go.Figure()
     f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["R"],name="Daily",mode="lines",line=dict(color="#DCEEE4",width=1)))
-    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA7"],name="MA 7",mode="lines",line=dict(color="#2E9160",width=2.5)))
-    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA14"],name="MA 14",mode="lines",line=dict(color="#1A6B3F",width=2.5)))
+    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA7"],name="MA 7",mode="lines",line=dict(color="#0BA5EC",width=2.5)))
+    f7.add_trace(go.Scatter(x=dma["T"].astype(str),y=dma["MA14"],name="MA 14",mode="lines",line=dict(color="#465FFF",width=2.5)))
     f7.update_layout(title="Moving Average Analysis",**cl);ac(f7,"6. Deep Dive")
 
     # Summary table
@@ -1873,18 +1866,18 @@ def generate_playground_html(df, date_start, date_end):
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
 *{{font-family:ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif;margin:0;padding:0;box-sizing:border-box;}}
 body{{background:#fff;padding:30px 40px;color:#333;max-width:1100px;margin:0 auto;}}
-.report-header{{background:linear-gradient(135deg,#1A6B3F,#2E9160,#C9A9E9);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
+.report-header{{background:linear-gradient(135deg,#465FFF,#0BA5EC,#9CB9FF);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
 .report-header h1{{font-size:28px;font-weight:800;}}.report-header p{{font-size:14px;opacity:0.85;}}
 .kpi-row{{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;}}
-.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #1A6B3F;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
-.kpi.gold{{border-left-color:#C08A2C;}}.kpi.blue{{border-left-color:#3B4C7A;}}.kpi.red{{border-left-color:#C0483C;}}.kpi.orange{{border-left-color:#9E6B4A;}}
+.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #465FFF;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
+.kpi.gold{{border-left-color:#7A5AF8;}}.kpi.blue{{border-left-color:#0BA5EC;}}.kpi.red{{border-left-color:#F04438;}}.kpi.orange{{border-left-color:#F79009;}}
 .kpi-label{{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}}
-.kpi-value{{font-size:22px;font-weight:800;color:#1A6B3F;margin-top:4px;}}
-.section-title{{font-size:20px;font-weight:700;color:#1A6B3F;border-bottom:3px solid #2E9160;padding-bottom:6px;margin:32px 0 16px;}}
+.kpi-value{{font-size:22px;font-weight:800;color:#465FFF;margin-top:4px;}}
+.section-title{{font-size:20px;font-weight:700;color:#465FFF;border-bottom:3px solid #0BA5EC;padding-bottom:6px;margin:32px 0 16px;}}
 table{{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;}}
-th{{background:#1A6B3F;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
+th{{background:#465FFF;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
 tr:nth-child(even){{background:#f9f9f9;}}.page-break{{page-break-after:auto;}}
-.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#1A6B3F;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);}}
+.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#465FFF;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);}}
 @media print{{.print-btn{{display:none;}}body{{padding:10px;}}.report-header,.kpi,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}.page-break{{page-break-after:always;}}}}
 </style></head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
@@ -2020,14 +2013,14 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
     <div class="kpi-row">
         <div class="kpi"><div class="kpi-label">Grand Total Revenue</div><div class="kpi-value">Rp {grand:,.0f}</div></div>
         <div class="kpi gold"><div class="kpi-label">F&B Nett Sales</div><div class="kpi-value">Rp {fnb_nett:,.0f}</div></div>
-        <div class="kpi" style="border-left-color:#1A6B3F"><div class="kpi-label">Playground Revenue</div><div class="kpi-value">Rp {pg_amt:,.0f}</div></div>
+        <div class="kpi" style="border-left-color:#465FFF"><div class="kpi-label">Playground Revenue</div><div class="kpi-value">Rp {pg_amt:,.0f}</div></div>
         <div class="kpi orange"><div class="kpi-label">F&B Pax</div><div class="kpi-value">{fnb_pax:,}</div></div>
         <div class="kpi red"><div class="kpi-label">Playground Anak</div><div class="kpi-value">{pg_child:,}</div></div>
     </div>""")
 
     # Pie
     ct=pd.DataFrame({"Segment":["F&B Tenants","Playground TnT"],"Revenue":[fnb_nett,pg_amt]})
-    fp=px.pie(ct,values="Revenue",names="Segment",title="Kontribusi Revenue",color_discrete_sequence=["#1A6B3F","#1A6B3F"],hole=0.4)
+    fp=px.pie(ct,values="Revenue",names="Segment",title="Kontribusi Revenue",color_discrete_sequence=["#465FFF","#465FFF"],hole=0.4)
     fp.update_layout(**cl);ac(fp,"1. Revenue Overview")
 
     # Daily stacked
@@ -2037,8 +2030,8 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
     d_pg.columns=["date","Playground"]
     mg=pd.merge(d_fnb,d_pg,on="date",how="outer").fillna(0).sort_values("date")
     fd=go.Figure()
-    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["F&B"],name="F&B",marker_color="#1A6B3F"))
-    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["Playground"],name="Playground",marker_color="#1A6B3F"))
+    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["F&B"],name="F&B",marker_color="#465FFF"))
+    fd.add_trace(go.Bar(x=mg["date"].astype(str),y=mg["Playground"],name="Playground",marker_color="#465FFF"))
     fd.update_layout(title="Daily Revenue — F&B vs Playground",barmode="stack",**cl);ac(fd,"2. Daily Comparison")
 
     # Monthly
@@ -2048,8 +2041,8 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
     mt_pg.columns=["month","Playground"]
     mt=pd.merge(mt_fnb,mt_pg,on="month",how="outer").fillna(0).sort_values("month")
     fm=go.Figure()
-    fm.add_trace(go.Bar(x=mt["month"],y=mt["F&B"],name="F&B",marker_color="#1A6B3F"))
-    fm.add_trace(go.Bar(x=mt["month"],y=mt["Playground"],name="Playground",marker_color="#1A6B3F"))
+    fm.add_trace(go.Bar(x=mt["month"],y=mt["F&B"],name="F&B",marker_color="#465FFF"))
+    fm.add_trace(go.Bar(x=mt["month"],y=mt["Playground"],name="Playground",marker_color="#465FFF"))
     fm.update_layout(title="Monthly Revenue — F&B vs Playground",barmode="group",**cl);ac(fm,"3. Monthly Comparison")
 
     # Table
@@ -2067,18 +2060,18 @@ def generate_master_html(df_fnb, df_pg, date_start, date_end):
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
 *{{font-family:ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif;margin:0;padding:0;box-sizing:border-box;}}
 body{{background:#fff;padding:30px 40px;color:#333;max-width:1100px;margin:0 auto;}}
-.report-header{{background:linear-gradient(135deg,#0B140F,#103D28,#C08A2C);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
+.report-header{{background:linear-gradient(135deg,#101828,#2A31D8,#7A5AF8);color:white;padding:24px 32px;border-radius:12px;margin-bottom:24px;}}
 .report-header h1{{font-size:28px;font-weight:800;}}.report-header p{{font-size:14px;opacity:0.85;}}
 .kpi-row{{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;}}
-.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #103D28;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
-.kpi.gold{{border-left-color:#C08A2C;}}.kpi.orange{{border-left-color:#9E6B4A;}}.kpi.red{{border-left-color:#C0483C;}}
+.kpi{{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:16px;border-left:5px solid #2A31D8;box-shadow:0 1px 4px rgba(0,0,0,0.06);}}
+.kpi.gold{{border-left-color:#7A5AF8;}}.kpi.orange{{border-left-color:#F79009;}}.kpi.red{{border-left-color:#F04438;}}
 .kpi-label{{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}}
-.kpi-value{{font-size:22px;font-weight:800;color:#103D28;margin-top:4px;}}
-.section-title{{font-size:20px;font-weight:700;color:#103D28;border-bottom:3px solid #C08A2C;padding-bottom:6px;margin:32px 0 16px;}}
+.kpi-value{{font-size:22px;font-weight:800;color:#2A31D8;margin-top:4px;}}
+.section-title{{font-size:20px;font-weight:700;color:#2A31D8;border-bottom:3px solid #7A5AF8;padding-bottom:6px;margin:32px 0 16px;}}
 table{{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;}}
-th{{background:#103D28;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
+th{{background:#2A31D8;color:white;padding:10px 12px;text-align:left;}}td{{padding:8px 12px;border-bottom:1px solid #eee;}}
 tr:nth-child(even){{background:#f9f9f9;}}.page-break{{page-break-after:auto;}}
-.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#103D28;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;}}
+.print-btn{{position:fixed;top:16px;right:16px;z-index:999;background:#2A31D8;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;}}
 @media print{{.print-btn{{display:none;}}body{{padding:10px;}}.report-header,.kpi,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}.page-break{{page-break-after:always;}}}}
 </style></head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
@@ -2101,8 +2094,8 @@ tr:nth-child(even){{background:#f9f9f9;}}.page-break{{page-break-after:auto;}}
 # pages from drifting apart visually and halves the surface where a bug can
 # hide.
 # ============================================================================
-GREEN, GREEN_D, OCHRE, LINE_C = "#1A6B3F", "#103D28", "#C08A2C", "#EBECE8"
-FLAT = "#F3F4F1"
+GREEN, GREEN_D, OCHRE, LINE_C = "#465FFF", "#2A31D8", "#7A5AF8", "#E4E7EC"
+FLAT = "#F2F4F7"
 
 
 def _daily(d, val, cnt):
@@ -2128,7 +2121,7 @@ def _bars_vs_avg(x, y, height=210, hatch_below=True):
         marker=dict(color=[GREEN if v >= avg and v > 0 else FLAT for v in y],
                     pattern=dict(shape=["" if (v >= avg and v > 0) else ("/" if hatch_below else "")
                                         for v in y],
-                                 fgcolor="#D9DDD7", size=5, solidity=.3)),
+                                 fgcolor="#D0D5DD", size=5, solidity=.3)),
         hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"))
     fig.update_layout(height=height, showlegend=False, bargap=.34,
                       yaxis=dict(visible=False), margin=dict(t=10, b=34, l=10, r=10))
@@ -2147,7 +2140,7 @@ def sec_trend(d, cfg):
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=g["day"], y=g["v"], mode="lines", line=dict(color=GREEN, width=2),
-                fill="tozeroy", fillcolor="rgba(26,107,63,.10)",
+                fill="tozeroy", fillcolor="rgba(70,95,255,.12)",
                 hovertemplate="%{x|%d %b}<br>Rp %{y:,.0f}<extra></extra>"))
             peak = g.loc[g["v"].idxmax()]
             fig.add_trace(go.Scatter(
@@ -2274,7 +2267,7 @@ def page_dashboard_fnb():
         with hc[0]:
             render_page_head("Dashboard F&B", "Belum ada data")
         render_card("Belum ada data",
-                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file ESB '
+                    '<p style="font-size:12.5px;color:#667085;margin:0">Upload file ESB '
                     'melalui menu Upload F&amp;B.</p>')
         return
     with hc[2]:
@@ -2284,7 +2277,7 @@ def page_dashboard_fnb():
                          f"{sel_tenant} · {dr[0]:%d %b %Y} – {dr[1]:%d %b %Y}")
     if df.empty:
         render_card("Tidak ada data",
-                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Rentang tanggal '
+                    '<p style="font-size:12.5px;color:#667085;margin:0">Rentang tanggal '
                     'yang dipilih tidak memuat transaksi.</p>')
         return
 
@@ -2334,7 +2327,7 @@ def page_dashboard_fnb():
             fig = go.Figure(go.Heatmap(
                 z=heat.values, x=[f"{int(c):02d}" for c in heat.columns],
                 y=["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"],
-                colorscale=[[0, "#F5F7F4"], [.5, "#7FB79A"], [1, GREEN_D]],
+                colorscale=[[0, "#F9FAFB"], [.5, "#9CB9FF"], [1, GREEN_D]],
                 hovertemplate="%{y} %{x}:00<br>Rp %{z:,.0f}<extra></extra>", showscale=False))
             fig.update_layout(height=230, margin=dict(t=10, b=34, l=54, r=14))
             show_chart(fig)
@@ -2523,7 +2516,7 @@ def page_performance():
     if df.empty:
         render_page_head("Performa Tenant", "Belum ada data penjualan")
         render_card("Belum ada data",
-                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file ESB '
+                    '<p style="font-size:12.5px;color:#667085;margin:0">Upload file ESB '
                     'atau CSV Playground lebih dulu — halaman ini akan terisi otomatis.</p>')
         return
 
@@ -2613,15 +2606,15 @@ def page_performance():
             fig = go.Figure(go.Bar(
                 x=days, y=vals,
                 marker=dict(
-                    color=["#1A6B3F" if v >= avg and v > 0 else "#F3F4F1" for v in vals],
+                    color=["#465FFF" if v >= avg and v > 0 else "#F2F4F7" for v in vals],
                     cornerradius=18,
                     pattern=dict(shape=["" if (v >= avg and v > 0) else "/" for v in vals],
-                                 fgcolor="#D9DDD7", size=5, solidity=.3)),
+                                 fgcolor="#D0D5DD", size=5, solidity=.3)),
                 hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"))
             fig.update_layout(height=200, margin=dict(t=4, b=4, l=4, r=4),
                               paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                               yaxis=dict(visible=False), showlegend=False, bargap=.4,
-                              xaxis=dict(showgrid=False, tickfont=dict(size=11, color="#8B948D")))
+                              xaxis=dict(showgrid=False, tickfont=dict(size=11, color="#667085")))
             show_chart(fig, use_container_width=True, config={"displayModeBar": False})
             st.caption("Bar pekat menandai hari di atas rata-rata, "
                        "bar diarsir di bawahnya.")
@@ -2632,15 +2625,15 @@ def page_performance():
             render_card(
                 "Perlu perhatian",
                 f'<p class="big-alert">{w["tenant_name"]} turun {abs(w["mom"]):.1f}%</p>'
-                f'<p style="font-size:11.5px;color:#8B948D;line-height:1.45;margin:0">'
+                f'<p style="font-size:11.5px;color:#667085;line-height:1.45;margin:0">'
                 f'{fmt_rp(prev_map.get(w["tenant_id"], 0))} &rarr; {fmt_rp(w["sales"])} '
                 f'pada periode ini.</p>',
                 foot=f"{len(falling)} tenant turun lebih dari 10%.")
         else:
             render_card(
                 "Perlu perhatian",
-                '<p class="big-alert" style="color:#1A6B3F">Tidak ada</p>'
-                '<p style="font-size:11.5px;color:#8B948D;margin:0">Tidak ada tenant yang '
+                '<p class="big-alert" style="color:#465FFF">Tidak ada</p>'
+                '<p style="font-size:11.5px;color:#667085;margin:0">Tidak ada tenant yang '
                 'turun lebih dari 10% dibanding periode sebelumnya.</p>')
 
     with c[2]:
@@ -2685,7 +2678,7 @@ def page_performance():
             occupied = tenancies[tenancies["end_date"].isna()]["unit_id"].nunique()
         bars = "".join(
             f'<i style="flex:1;height:5px;border-radius:20px;background:'
-            f'{"#2E9160" if i < occupied else "rgba(255,255,255,.2)"}"></i>'
+            f'{"#0BA5EC" if i < occupied else "rgba(255,255,255,.2)"}"></i>'
             for i in range(max(n_units, 1)))
         empty = n_units - occupied
         with st.container(border=True):
@@ -3169,7 +3162,7 @@ def page_dashboard_playground():
         with hc[0]:
             render_page_head("Dashboard Playground", "Belum ada data")
         render_card("Belum ada data",
-                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file CSV '
+                    '<p style="font-size:12.5px;color:#667085;margin:0">Upload file CSV '
                     'melalui menu Upload Playground.</p>')
         return
     # Children and companions are the two things being counted; visitors is the
@@ -3182,7 +3175,7 @@ def page_dashboard_playground():
                          f"Twist N' Turns · {dr[0]:%d %b %Y} – {dr[1]:%d %b %Y}")
     if df.empty:
         render_card("Tidak ada data",
-                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Rentang tanggal '
+                    '<p style="font-size:12.5px;color:#667085;margin:0">Rentang tanggal '
                     'yang dipilih tidak memuat transaksi.</p>')
         return
 
@@ -3282,15 +3275,13 @@ def page_master_dashboard():
     fnb_empty, pg_empty = df_fnb.empty, df_pg.empty
 
     if fnb_empty and pg_empty:
-        render_page_head("Master Dashboard", "Belum ada data")
-        render_card("Belum ada data",
-                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload data F&amp;B '
-                    'atau Playground lebih dulu.</p>')
+        page_head("Master Dashboard", "Belum ada data")
+        with card("Belum ada data"):
+            st.caption("Upload data F&B atau Playground lebih dulu.")
         return
 
-    dates = []
-    if not fnb_empty: dates += df_fnb["sales_date"].tolist()
-    if not pg_empty:  dates += df_pg["sales_date"].tolist()
+    dates = ([] if fnb_empty else df_fnb["sales_date"].tolist()) + \
+            ([] if pg_empty else df_pg["sales_date"].tolist())
     dmin, dmax = min(dates).date(), max(dates).date()
 
     hc = st.columns([3, 1])
@@ -3300,152 +3291,148 @@ def page_master_dashboard():
                            min_value=dmin, max_value=dmax, key="master_dr",
                            label_visibility="collapsed")
     if isinstance(dr, tuple) and len(dr) == 2:
-        s, e = pd.Timestamp(dr[0]), pd.Timestamp(dr[1])
-        if not fnb_empty: df_fnb = df_fnb[(df_fnb["sales_date"] >= s) & (df_fnb["sales_date"] <= e)]
-        if not pg_empty:  df_pg = df_pg[(df_pg["sales_date"] >= s) & (df_pg["sales_date"] <= e)]
+        s_, e_ = pd.Timestamp(dr[0]), pd.Timestamp(dr[1])
+        if not fnb_empty: df_fnb = df_fnb[(df_fnb["sales_date"] >= s_) & (df_fnb["sales_date"] <= e_)]
+        if not pg_empty:  df_pg = df_pg[(df_pg["sales_date"] >= s_) & (df_pg["sales_date"] <= e_)]
     else:
         dr = (dmin, dmax)
     fnb_empty, pg_empty = df_fnb.empty, df_pg.empty
     with hc[0]:
-        render_page_head("Master Dashboard",
-                         f"Seluruh tenant · {dr[0]:%d %b %Y} – {dr[1]:%d %b %Y}")
+        page_head("Master Dashboard",
+                  f"Seluruh tenant · {dr[0]:%d %b %Y} – {dr[1]:%d %b %Y}")
 
     fnb_nett = df_fnb["nett_sales"].sum() if not fnb_empty else 0
     fnb_pax = df_fnb["pax_total"].sum() if not fnb_empty else 0
     pg_nett = df_pg["nett_sales"].sum() if not pg_empty else 0
-    pg_vis = (df_pg["child_total"] + df_pg["companion_total"]).sum() if not pg_empty else 0
-    grand, visitors = fnb_nett + pg_nett, fnb_pax + pg_vis
-    idf = lambda n: f"{n:,.0f}".replace(",", ".")
+    pg_child = df_pg["child_total"].sum() if not pg_empty else 0
+    pg_comp = df_pg["companion_total"].sum() if not pg_empty else 0
+    grand = fnb_nett + pg_nett
 
     k = st.columns(4)
-    with k[0]: render_kpi("Total Nett Sales", fmt_rp(grand), featured=True,
-                          caption="F&B dan Playground digabung")
-    with k[1]: render_kpi("F&B", fmt_rp(fnb_nett),
-                          caption=f"{fnb_nett/grand*100:.1f}% dari total" if grand else "belum ada data")
-    with k[2]: render_kpi("Playground", fmt_rp(pg_nett),
-                          caption=f"{pg_nett/grand*100:.1f}% dari total" if grand else None)
-    with k[3]: render_kpi("Pengunjung", idf(visitors),
-                          caption=f"{idf(fnb_pax)} pax · {idf(pg_vis)} playground")
+    kpi(k[0], "Total Nett Sales", fmt_rp(grand))
+    kpi(k[1], "F&B", fmt_rp(fnb_nett),
+        help=f"{fnb_nett/grand*100:.1f}% dari total" if grand else None)
+    kpi(k[2], "Playground", fmt_rp(pg_nett),
+        help=f"{pg_nett/grand*100:.1f}% dari total" if grand else None)
+    kpi(k[3], "Pengunjung", id_num(fnb_pax + pg_child + pg_comp))
 
-    # F&B and Playground must be told apart at a glance, so they hold two
-    # distinct hues from the palette everywhere on this page. A bulk colour
-    # migration had collapsed both onto the same green, which left the
-    # comparison charts unable to say which half was which.
+    # ---- hero: statistics chart with a segmented period control ----
     C_FNB, C_PG = GREEN, OCHRE
+    c = st.columns([2, 1])
+    with c[0]:
+        with card("Statistik Penjualan"):
+            mode = st.radio("Periode", ["Harian", "Mingguan", "Bulanan"],
+                            horizontal=True, label_visibility="collapsed",
+                            key="master_mode")
 
-    t = st.tabs(["Overview", "Perbandingan Harian", "Perbandingan Bulanan"])
+            def _series(df, val):
+                if df.empty:
+                    return pd.Series(dtype=float)
+                if mode == "Harian":
+                    return df.groupby(df["sales_date"].dt.date)[val].sum()
+                if mode == "Mingguan":
+                    return df.groupby(df["sales_date"].dt.to_period("W")
+                                        .apply(lambda p: p.start_time.date()))[val].sum()
+                return df.groupby(df["sales_date"].dt.to_period("M").astype(str))[val].sum()
 
-    with t[0]:
-        c = st.columns([1, 2])
-        with c[0]:
-            with st.container(border=True):
-                st.markdown("###### Kontribusi pendapatan")
-                fig = go.Figure(go.Pie(
-                    labels=["F&B", "Playground"], values=[fnb_nett, pg_nett], hole=.62,
-                    marker=dict(colors=[C_FNB, C_PG], line=dict(color="#fff", width=2)),
-                    textinfo="percent",
-                    hovertemplate="%{label}<br>Rp %{value:,.0f}<extra></extra>"))
-                fig.update_layout(height=260, margin=dict(t=10, b=10, l=10, r=10),
-                                  legend=dict(orientation="h", y=-0.05, x=.5, xanchor="center"))
-                show_chart(fig)
-        with c[1]:
+            f_s, p_s = _series(df_fnb, "nett_sales"), _series(df_pg, "nett_sales")
+            idx = sorted(set(f_s.index) | set(p_s.index))
+            f_v = [float(f_s.get(i, 0)) for i in idx]
+            p_v = [float(p_s.get(i, 0)) for i in idx]
+            fig = go.Figure()
+            if mode == "Harian":
+                fig.add_scatter(x=idx, y=f_v, name="F&B", mode="lines",
+                                line=dict(color=C_FNB, width=2),
+                                fill="tozeroy", fillcolor="rgba(70,95,255,.12)",
+                                hovertemplate="%{x|%d %b}<br>F&B Rp %{y:,.0f}<extra></extra>")
+                fig.add_scatter(x=idx, y=p_v, name="Playground", mode="lines",
+                                line=dict(color=C_PG, width=2),
+                                fill="tozeroy", fillcolor="rgba(122,90,248,.10)",
+                                hovertemplate="%{x|%d %b}<br>Playground Rp %{y:,.0f}<extra></extra>")
+            else:
+                fig.add_bar(x=[str(i) for i in idx], y=f_v, name="F&B", marker_color=C_FNB,
+                            hovertemplate="%{x}<br>F&B Rp %{y:,.0f}<extra></extra>")
+                fig.add_bar(x=[str(i) for i in idx], y=p_v, name="Playground", marker_color=C_PG,
+                            hovertemplate="%{x}<br>Playground Rp %{y:,.0f}<extra></extra>")
+                fig.update_layout(barmode="group", bargap=.3)
+            show_chart(fig, height=300)
+
+    with c[1]:
+        with card("Kontribusi Pendapatan"):
+            fig = go.Figure(go.Pie(
+                labels=["F&B", "Playground"], values=[fnb_nett, pg_nett], hole=.72,
+                marker=dict(colors=[C_FNB, C_PG], line=dict(color="#fff", width=2)),
+                textinfo="none",
+                hovertemplate="%{label}<br>Rp %{value:,.0f} (%{percent})<extra></extra>"))
+            fig.update_layout(height=200, margin=dict(t=6, b=6, l=6, r=6),
+                              showlegend=False,
+                              annotations=[dict(text=f"<b>{fmt_rp(grand)}</b>",
+                                                showarrow=False,
+                                                font=dict(size=15, color="#101828"))])
+            show_chart(fig)
             rows = []
             if not fnb_empty:
-                for _, r in (df_fnb.groupby(["tenant_id", "tenant_name"])["nett_sales"]
-                                   .sum().reset_index().sort_values("nett_sales", ascending=False)
-                                   ).iterrows():
-                    rows.append((r["tenant_id"], r["tenant_name"], "F&B",
-                                 f'<span class="amt num">{fmt_rp(r["nett_sales"])}</span>'))
+                top = (df_fnb.groupby("tenant_name")["nett_sales"].sum()
+                             .sort_values(ascending=False))
+                rows += [{"Sumber": n, "Nett Sales": fmt_rp(v)} for n, v in top.items()]
             if not pg_empty:
-                rows.append(("T900", "Twist N' Turns", "Playground",
-                             f'<span class="amt num">{fmt_rp(pg_nett)}</span>'))
-            render_card("Pendapatan per unit usaha", rows_html(rows),
-                        foot="Playground memakai POS terpisah, jadi tampil sebagai satu baris.")
+                rows.append({"Sumber": "Twist N' Turns", "Nett Sales": fmt_rp(pg_nett)})
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    with t[1]:
-        d_fnb = (df_fnb.groupby(df_fnb["sales_date"].dt.date)["nett_sales"].sum()
-                 if not fnb_empty else pd.Series(dtype=float))
-        d_pg = (df_pg.groupby(df_pg["sales_date"].dt.date)["nett_sales"].sum()
-                if not pg_empty else pd.Series(dtype=float))
-        idx = sorted(set(d_fnb.index) | set(d_pg.index))
-        if not idx:
-            st.info("Tidak ada data pada rentang ini.")
-        else:
-            f_v = [float(d_fnb.get(i, 0)) for i in idx]
-            p_v = [float(d_pg.get(i, 0)) for i in idx]
-            with st.container(border=True):
-                st.markdown("###### Pendapatan harian")
-                fig = go.Figure()
-                fig.add_bar(x=idx, y=f_v, name="F&B", marker_color=C_FNB,
-                            hovertemplate="%{x|%d %b}<br>F&B Rp %{y:,.0f}<extra></extra>")
-                fig.add_bar(x=idx, y=p_v, name="Playground", marker_color=C_PG,
-                            hovertemplate="%{x|%d %b}<br>Playground Rp %{y:,.0f}<extra></extra>")
-                fig.update_layout(barmode="stack", height=300,
-                                  margin=dict(t=10, b=34, l=56, r=14))
-                show_chart(fig)
-            with st.container(border=True):
-                st.markdown("###### Tren gabungan")
-                fig = go.Figure()
-                fig.add_scatter(x=idx, y=[a + b for a, b in zip(f_v, p_v)], name="Total",
-                                mode="lines", line=dict(color=GREEN_D, width=2.5),
-                                fill="tozeroy", fillcolor="rgba(16,61,40,.08)",
-                                hovertemplate="%{x|%d %b}<br>Rp %{y:,.0f}<extra></extra>")
-                fig.update_layout(height=260, margin=dict(t=10, b=34, l=56, r=14),
-                                  showlegend=False)
-                show_chart(fig)
+    # ---- two half-width analytics cards ----
+    c2 = st.columns(2)
+    with c2[0]:
+        with card("Analitik F&B", "Ringkasan tenant ESB pada rentang ini"):
+            if fnb_empty:
+                st.caption("Belum ada data F&B.")
+            else:
+                days = df_fnb["sales_date"].dt.date.nunique()
+                top_t = df_fnb.groupby("tenant_name")["nett_sales"].sum().idxmax()
+                a = st.columns(2)
+                a[0].metric("Pax", id_num(fnb_pax))
+                a[1].metric("Rata / Pax", fmt_rp(fnb_nett / fnb_pax if fnb_pax else 0))
+                b = st.columns(2)
+                b[0].metric("Rata / Hari", fmt_rp(fnb_nett / days if days else 0))
+                b[1].metric("Tenant Teratas", top_t)
+    with c2[1]:
+        with card("Analitik Playground", "Ringkasan Twist N' Turns pada rentang ini"):
+            if pg_empty:
+                st.caption("Belum ada data Playground.")
+            else:
+                trx = len(df_pg)
+                a = st.columns(2)
+                a[0].metric("Transaksi", id_num(trx))
+                a[1].metric("Anak", id_num(pg_child))
+                b = st.columns(2)
+                b[0].metric("Pendamping", id_num(pg_comp))
+                b[1].metric("Rasio Pendamping", f"{pg_comp/pg_child:.2f}" if pg_child else "0")
 
-    with t[2]:
-        m_fnb = (df_fnb.groupby(df_fnb["sales_date"].dt.to_period("M").astype(str))["nett_sales"].sum()
-                 if not fnb_empty else pd.Series(dtype=float))
-        m_pg = (df_pg.groupby(df_pg["sales_date"].dt.to_period("M").astype(str))["nett_sales"].sum()
-                if not pg_empty else pd.Series(dtype=float))
-        months = sorted(set(m_fnb.index) | set(m_pg.index))
-        if not months:
-            st.info("Tidak ada data pada rentang ini.")
-        else:
-            f_v = [float(m_fnb.get(m, 0)) for m in months]
-            p_v = [float(m_pg.get(m, 0)) for m in months]
-            with st.container(border=True):
-                st.markdown("###### Pendapatan per bulan")
-                fig = go.Figure()
-                fig.add_bar(x=months, y=f_v, name="F&B", marker_color=C_FNB,
-                            hovertemplate="%{x}<br>F&B Rp %{y:,.0f}<extra></extra>")
-                fig.add_bar(x=months, y=p_v, name="Playground", marker_color=C_PG,
-                            hovertemplate="%{x}<br>Playground Rp %{y:,.0f}<extra></extra>")
-                fig.update_layout(barmode="group", height=300, bargap=.3,
-                                  margin=dict(t=10, b=34, l=56, r=14))
-                show_chart(fig)
-            tbl = pd.DataFrame({"Bulan": months, "F&B (Rp)": f_v, "Playground (Rp)": p_v,
-                                "Total (Rp)": [a + b for a, b in zip(f_v, p_v)]})
-            st.markdown("###### Ringkasan bulanan")
-            st.dataframe(tbl, use_container_width=True, hide_index=True,
-                column_config={
-                    "F&B (Rp)":        st.column_config.NumberColumn(format="localized"),
-                    "Playground (Rp)": st.column_config.NumberColumn(format="localized"),
-                    "Total (Rp)":      st.column_config.NumberColumn(format="localized"),
-                })
-
-    st.markdown("###### Ekspor")
-    ec = st.columns(4)
-    s_, e_ = dr[0], dr[1]
-    with ec[0]:
-        st.download_button("🖨️ Print / PDF", generate_master_html(df_fnb, df_pg, s_, e_),
-                           f"grove_master_{s_}_{e_}.html", "text/html", use_container_width=True)
-    with ec[1]:
-        st.download_button("📊 XLSX", generate_master_xlsx(df_fnb, df_pg, s_, e_),
-                           f"grove_master_{s_}_{e_}.xlsx",
-                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                           use_container_width=True)
-    with ec[2]:
-        raw = pd.concat([df_fnb.assign(sumber="F&B"), df_pg.assign(sumber="Playground")],
-                        ignore_index=True) if not (fnb_empty or pg_empty) else (
-              df_fnb.assign(sumber="F&B") if not fnb_empty else df_pg.assign(sumber="Playground"))
-        st.download_button("⬇️ Data mentah (CSV)", raw.to_csv(index=False).encode(),
-                           "grove_master_raw.csv", "text/csv", use_container_width=True)
-    with ec[3]:
-        summ = pd.DataFrame({"segmen": ["F&B", "Playground"], "nett_sales": [fnb_nett, pg_nett]})
-        st.download_button("⬇️ Ringkasan (CSV)", summ.to_csv(index=False).encode(),
-                           "grove_master_summary.csv", "text/csv", use_container_width=True)
+    # ---- export ----
+    with card("Ekspor"):
+        ec = st.columns(4)
+        s_, e_ = dr[0], dr[1]
+        with ec[0]:
+            st.download_button("Print / PDF", generate_master_html(df_fnb, df_pg, s_, e_),
+                               f"grove_master_{s_}_{e_}.html", "text/html",
+                               use_container_width=True)
+        with ec[1]:
+            st.download_button("XLSX", generate_master_xlsx(df_fnb, df_pg, s_, e_),
+                               f"grove_master_{s_}_{e_}.xlsx",
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True)
+        with ec[2]:
+            raw = pd.concat([df_fnb.assign(sumber="F&B"), df_pg.assign(sumber="Playground")],
+                            ignore_index=True) if not (fnb_empty or pg_empty) else (
+                  df_fnb.assign(sumber="F&B") if not fnb_empty
+                  else df_pg.assign(sumber="Playground"))
+            st.download_button("Data mentah (CSV)", raw.to_csv(index=False).encode(),
+                               "grove_master_raw.csv", "text/csv", use_container_width=True)
+        with ec[3]:
+            summ = pd.DataFrame({"segmen": ["F&B", "Playground"],
+                                 "nett_sales": [fnb_nett, pg_nett]})
+            st.download_button("Ringkasan (CSV)", summ.to_csv(index=False).encode(),
+                               "grove_master_summary.csv", "text/csv",
+                               use_container_width=True)
 
 
 def get_db():
