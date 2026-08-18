@@ -31,7 +31,7 @@ pio.templates["grove"] = go.layout.Template(
         # A share of the bar width, not a fixed pixel count: 8px turned the thin
         # bars of a 30-day series into capsules while leaving wide bars barely
         # rounded. A percentage behaves at both extremes.
-        barcornerradius="22%",
+        barcornerradius="10%",
         # The title owns the top margin, the legend the bottom one. Both used to
         # sit at x=0 directly above the plot, so any chart with a legend drew
         # its title straight through the swatches.
@@ -626,20 +626,28 @@ def apply_custom_css():
     /* ---------------- cards ---------------- */
     .box{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);
       padding:15px;height:100%}
-    /* A card holding a Streamlit widget cannot be an HTML wrapper: Streamlit
-       sanitises each st.markdown call on its own and closes any dangling div,
-       so an opening tag in one call never wraps a chart emitted by the next.
-       Those cards use st.container(border=True) with an invisible marker, and
-       :has() styles only the containers that carry it -- the testid alone
-       belongs to every vertical block on the page. */
-    [data-testid="stVerticalBlockBorderWrapper"]:has(> div > div > .cardmark){
-      background:var(--card);border:1.5px solid var(--line)!important;
-      border-radius:var(--r);padding:15px}
+    /* Charts and tables get their card from their own testid rather than from a
+       wrapper. The previous approach matched an ancestor with
+       :has(> div > div > .cardmark), which meant guessing how deeply Streamlit
+       nests its blocks -- the guess was wrong and the cards rendered unstyled.
+       A title and the element below it are drawn as two halves of one card:
+       the title carries the top corners and no bottom border, the element the
+       bottom corners and no top border, so they read as a single surface
+       without either needing to contain the other. */
+    .chart-title{
+      background:var(--card);border:1.5px solid var(--line);border-bottom:none;
+      border-radius:var(--r) var(--r) 0 0;padding:14px 16px 8px;margin:0;
+      font-size:13.5px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+    [data-testid="stPlotlyChart"],
+    [data-testid="stDataFrame"]{
+      background:var(--card);border:1.5px solid var(--line);
+      border-radius:0 0 var(--r) var(--r);border-top:none;padding:4px 12px 12px}
+    /* A chart with no title above it still needs all four corners. */
+    [data-testid="stElementContainer"]:first-child > [data-testid="stPlotlyChart"]{
+      border-top:1.5px solid var(--line);border-radius:var(--r)}
     .cardmark{display:none}
     .box.dark{background:var(--g900);border-color:var(--g900);color:#fff}
     .box h3{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
-    .chart-title{font-size:13px;font-weight:700;color:var(--ink);letter-spacing:-.01em;
-      margin:6px 0 -4px}
     .box.dark h3{color:#fff}
     .kpi .lb{display:flex;justify-content:space-between;align-items:center;gap:8px;
       font-size:12.5px;font-weight:600;color:var(--ink-2)}
@@ -783,14 +791,6 @@ def render_card(title, inner, foot=None, dark=False):
     f = f'<p class="foot">{foot}</p>' if foot else ""
     st.markdown(f'<div class="box{" dark" if dark else ""}"><h3>{title}</h3>{inner}{f}</div>',
                 unsafe_allow_html=True)
-
-
-def card_container():
-    """Bordered container styled as a card. Use when a Streamlit widget must
-    live inside it; drop the marker in as the first child."""
-    c = st.container(border=True)
-    c.markdown('<span class="cardmark"></span>', unsafe_allow_html=True)
-    return c
 
 
 def move_tag(pct):
@@ -2227,7 +2227,7 @@ def sec_trend(d, cfg):
 
     c = st.columns([2, 1])
     with c[0]:
-        with card_container():
+        if True:
             st.markdown('<div class="chart-title">Tren penjualan harian</div>',
                         unsafe_allow_html=True)
             fig = go.Figure()
@@ -2263,7 +2263,7 @@ def sec_trend(d, cfg):
     days = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
     dow = (d.assign(w=d["sales_date"].dt.dayofweek)
              .groupby("w")[cfg["val"]].mean().reindex(range(7), fill_value=0))
-    with card_container():
+    if True:
         st.markdown('<div class="chart-title">Rata-rata per hari dalam seminggu</div>',
                     unsafe_allow_html=True)
         show_chart(_bars_vs_avg(days, [float(dow.get(i, 0)) for i in range(7)]))
@@ -2278,7 +2278,7 @@ def sec_weekly(d, cfg):
     g["wow"] = g["v"].pct_change() * 100
     g["per"] = (g["v"] / g["c"].replace(0, pd.NA)).fillna(0).round()
 
-    with card_container():
+    if True:
         st.markdown('<div class="chart-title">Penjualan per minggu</div>', unsafe_allow_html=True)
         show_chart(_bars_vs_avg(g["label"].tolist(), g["v"].tolist(), height=230))
 
@@ -2302,7 +2302,7 @@ def sec_monthly(d, cfg):
 
     c = st.columns([2, 1])
     with c[0]:
-        with card_container():
+        if True:
             st.markdown('<div class="chart-title">Penjualan per bulan</div>', unsafe_allow_html=True)
             show_chart(_bars_vs_avg(g["mo"].tolist(), g["v"].tolist(), height=240))
     with c[1]:
@@ -2318,7 +2318,7 @@ def sec_deep(d, cfg, extra_cols=None):
     g = _daily(d, cfg["val"], cfg["cnt"])
     g["per"] = (g["v"] / g["c"].replace(0, pd.NA)).fillna(0).round()
     g["day"] = pd.to_datetime(g["day"])
-    with card_container():
+    if True:
         st.markdown('<div class="chart-title">Rincian harian</div>', unsafe_allow_html=True)
         st.dataframe(
             g.rename(columns={"day": "Tanggal", "v": "Nett Sales (Rp)",
@@ -2405,7 +2405,7 @@ def page_dashboard_fnb():
         hourly = df.groupby("hr").agg(v=("nett_sales", "sum"), p=("pax_total", "sum")).reset_index()
         c = st.columns([2, 1])
         with c[0]:
-            with card_container():
+            if True:
                 st.markdown('<div class="chart-title">Penjualan per jam</div>', unsafe_allow_html=True)
                 show_chart(_bars_vs_avg([f"{h:02d}" for h in hourly["hr"]],
                                         hourly["v"].tolist(), height=240))
@@ -2420,7 +2420,7 @@ def page_dashboard_fnb():
         heat = (df.assign(w=df["sales_date"].dt.dayofweek)
                   .pivot_table(index="w", columns="hr", values="nett_sales", aggfunc="sum")
                   .reindex(range(7)).fillna(0))
-        with card_container():
+        if True:
             st.markdown('<div class="chart-title">Peta jam × hari</div>', unsafe_allow_html=True)
             fig = go.Figure(go.Heatmap(
                 z=heat.values, x=[f"{int(c):02d}" for c in heat.columns],
@@ -2439,7 +2439,7 @@ def page_dashboard_fnb():
                                              p=("pax_total", "sum")).reset_index()
             c = st.columns([1, 2])
             with c[0]:
-                with card_container():
+                if True:
                     st.markdown('<div class="chart-title">Kontribusi segmen</div>',
                                 unsafe_allow_html=True)
                     fig = go.Figure(go.Pie(labels=agg["segment"], values=agg["v"], hole=.62,
@@ -2690,8 +2690,9 @@ def page_performance():
     c = st.columns([2, 1, 1])
     with c[0]:
         # Holds a chart, so it is a bordered container rather than HTML.
-        with card_container():
-            st.markdown('<h3>Penjualan per hari</h3>', unsafe_allow_html=True)
+        if True:
+            st.markdown('<div class="chart-title">Penjualan per hari</div>',
+                        unsafe_allow_html=True)
             days = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
             daily = (cur_df.assign(dow=cur_df["sales_date"].dt.dayofweek)
                            .groupby("dow")["nett_sales"].sum()
@@ -2797,8 +2798,9 @@ def page_performance():
                           .agg(sales=("nett_sales", "sum"), visitors=("visitors", "sum"),
                                brand=("tenant_name", lambda s: ", ".join(sorted(set(s)))))
                           .reset_index().sort_values("sales", ascending=False))
-        with card_container():
-            st.markdown('<h3>Performa per unit</h3>', unsafe_allow_html=True)
+        if True:
+            st.markdown('<div class="chart-title">Performa per unit</div>',
+                        unsafe_allow_html=True)
             st.dataframe(per_unit, use_container_width=True, hide_index=True,
                 column_config={
                     "unit_code": st.column_config.TextColumn("Unit"),
@@ -3227,7 +3229,7 @@ def _export_row(df, label, dr, kind="fnb"):
     """The four export buttons, identical on both dashboards."""
     s, e = (dr[0], dr[1]) if isinstance(dr, tuple) else (date.today(), date.today())
     st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-    with card_container():
+    if True:
         st.markdown('<div class="chart-title">Ekspor</div>', unsafe_allow_html=True)
         c = st.columns(4)
         if kind == "fnb":
@@ -3314,7 +3316,7 @@ def page_dashboard_playground():
         daily.columns = ["day", "anak", "pendamping"]
         c = st.columns([2, 1])
         with c[0]:
-            with card_container():
+            if True:
                 st.markdown('<div class="chart-title">Anak dan pendamping per hari</div>',
                             unsafe_allow_html=True)
                 fig = go.Figure()
@@ -3353,7 +3355,7 @@ def page_dashboard_playground():
         agg["per_day"] = agg["v"] / agg["d"].replace(0, pd.NA)
         c = st.columns([1, 2])
         with c[0]:
-            with card_container():
+            if True:
                 st.markdown('<div class="chart-title">Rata-rata per hari</div>',
                             unsafe_allow_html=True)
                 fig = go.Figure(go.Bar(
