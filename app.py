@@ -551,337 +551,212 @@ class PlaygroundParser:
 # STYLING
 # ============================================================================
 def apply_custom_css():
+    """
+    Colour, type and shape only.
+
+    Everything structural -- containers, grids, spacing, heights -- is left to
+    Streamlit. The previous stylesheet fought it: raw HTML was injected for
+    cards, and Streamlit measures each markdown block in JavaScript without
+    seeing padding added inside, so every card reported 16px shorter than it
+    drew and sat on the element below. Patching that with guessed selectors and
+    negative margins moved the damage around instead of removing it. No rule
+    here sets position, height, or a negative margin.
+    """
     st.markdown("""
     <style>
-    /* ========================================================================
-       Bento design system.
-
-       Streamlit renders its own wrappers, so most of the work here is
-       neutralising default padding and gaps before the card system can sit on
-       top. Anything targeting data-testid is compensating for that, not
-       decoration.
-       ==================================================================== */
     :root{
-      --bg:#EFEFEC; --card:#FFFFFF; --ink:#131715; --ink-2:#4A524D; --muted:#8B948D;
-      --line:#EBECE8; --chip:#F4F5F2;
-      --g900:#103D28; --g700:#1A6B3F; --g500:#2E9160; --g100:#DCEEE4; --g50:#EEF6F1;
-      --amber:#B7791F; --amber-bg:#FCF3E3; --red:#C0483C; --red-bg:#FBEDEB;
-      --r:18px;
+      --bg:#EFEFEC; --card:#FFFFFF; --ink:#131715; --muted:#8B948D; --line:#E4E6E1;
+      --g900:#103D28; --g700:#1A6B3F; --g500:#2E9160; --g50:#EEF6F1;
+      --ochre:#C08A2C; --red:#C0483C;
     }
     .stApp{background:var(--bg)}
-    /* Streamlit 1.45 names this container by testid; ".main .block-container"
-       never matched, so neither the padding nor the max-width was ever
-       applied -- which is why the page stretched edge to edge on a wide
-       screen. Both selectors are kept so this survives either naming. */
-    /* Top padding clears the fixed 60px header. At 1.6rem the first card began
-       at y=50 and sat beneath it, which on Streamlit Cloud means underneath the
-       Share and Deploy buttons -- the overlap visible in the deployed app but
-       never in a local run, because a local run has no Cloud toolbar. */
-    [data-testid="stMainBlockContainer"],
-    .main .block-container{padding:4.75rem 1.6rem 3rem!important;max-width:1280px}
-    html,body,[class*="css"]{
-      font-family:ui-rounded,"SF Pro Rounded","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
-    }
-    .num{font-variant-numeric:tabular-nums;letter-spacing:-.03em}
-
-    /* Streamlit measures an element container in JavaScript and reports it 16px
-       shorter than the raw HTML rendered inside it. CSS cannot correct that --
-       height:auto, margin resets and box sizing were all measured against the
-       live DOM and none moved it. So the gap accommodates the overflow instead
-       of fighting it. Measured worst-case seam by gap: 0.55rem -> -7px
-       (overlapping), 1rem -> 0, 1.5rem -> +8px clear. */
-    [data-testid="stVerticalBlock"]{gap:1.5rem}
-    [data-testid="stHorizontalBlock"]{gap:.75rem}
-    /* The header is position:fixed and carries the Cloud toolbar. Made
-       transparent and zero-height it stopped masking anything, so scrolled
-       content showed straight through the Share/Deploy buttons and read as
-       overlapping. It keeps the canvas colour and its height instead. */
+    html,body,[class*="css"],button,input,select{
+      font-family:ui-rounded,"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif}
     header[data-testid="stHeader"]{background:var(--bg)}
-    footer{display:none}
 
-    /* ---------------- sidebar as a floating white panel ---------------- */
-    section[data-testid="stSidebar"]{background:var(--bg);padding:14px 0 14px 14px}
-    section[data-testid="stSidebar"] > div{background:var(--card);border-radius:var(--r);padding-top:6px}
-    section[data-testid="stSidebar"] .stMarkdown{color:var(--ink)}
-    .sb-logo{display:flex;align-items:center;gap:9px;padding:6px 4px 2px}
-    .sb-logo .mark{width:27px;height:27px;border-radius:50%;background:var(--g700);color:#fff;
-      display:grid;place-items:center;font-size:12px;font-weight:800}
-    .sb-logo b{font-size:15.5px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
-    .sb-who{padding:2px 4px 0}
-    .sb-who b{font-size:12.5px;color:var(--ink)}
-    .sb-who small{display:block;font-size:10.5px;color:var(--muted)}
-    .sb-stats{display:flex;gap:6px;padding:8px 4px 2px;flex-wrap:wrap}
-    .sb-stats span{background:var(--chip);border-radius:20px;padding:3px 9px;font-size:10.5px;
-      font-weight:700;color:var(--ink-2)}
+    /* Cards: Streamlit's own bordered container, restyled. Because Streamlit
+       creates and measures it, it can never disagree with its contents. */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]){
+      background:var(--card);border-color:var(--line);border-radius:16px}
 
-    /* radio -> nav list */
-    section[data-testid="stSidebar"] [role="radiogroup"]{gap:1px}
+    [data-testid="stMetricValue"]{
+      font-size:1.7rem;font-weight:700;color:var(--ink);
+      font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+    [data-testid="stMetricLabel"]{font-size:.8rem;color:var(--muted);font-weight:600}
+    [data-testid="stMetricDelta"]{font-size:.78rem}
+
+    h1,h2,h3,h4{color:var(--ink);letter-spacing:-.02em}
+    h1{font-size:1.7rem!important;font-weight:800}
+    h2{font-size:1.2rem!important;font-weight:700}
+    h3{font-size:1rem!important;font-weight:700}
+    .stCaption,[data-testid="stCaptionContainer"]{color:var(--muted)}
+
+    section[data-testid="stSidebar"]{background:var(--card);border-right:1px solid var(--line)}
     section[data-testid="stSidebar"] [role="radiogroup"] label{
-      padding:7px 10px;border-radius:11px;font-size:12.5px;color:var(--muted);font-weight:500;
-      transition:background .12s,color .12s}
-    section[data-testid="stSidebar"] [role="radiogroup"] label:hover{background:var(--chip);color:var(--ink)}
-    section[data-testid="stSidebar"] [role="radiogroup"] label p{font-size:12.5px!important;margin:0}
+      padding:6px 10px;border-radius:10px;font-size:.86rem}
+    section[data-testid="stSidebar"] [role="radiogroup"] label:hover{background:var(--bg)}
     section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){
-      background:var(--g50);color:var(--ink);font-weight:700}
-    section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p{font-weight:700!important}
+      background:var(--g50);font-weight:700}
     section[data-testid="stSidebar"] [role="radiogroup"] input{display:none}
 
-    /* ---------------- top bar ---------------- */
-    .topbar{background:var(--card);border-radius:var(--r);padding:10px 15px;display:flex;
-      align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
-    .topbar .search{flex:1;min-width:170px;display:flex;align-items:center;gap:9px;
-      background:var(--chip);border-radius:20px;padding:8px 13px;color:var(--muted);font-size:12.5px}
-    .topbar .kbd{margin-left:auto;background:var(--card);border-radius:6px;padding:2px 6px;font-size:10px}
-    .topbar .av{width:33px;height:33px;border-radius:50%;background:var(--g100);color:var(--g700);
-      display:grid;place-items:center;font-weight:800;font-size:12.5px}
-    .topbar .who b{display:block;font-size:12.5px;color:var(--ink)}
-    .topbar .who small{font-size:10.5px;color:var(--muted)}
-
-    /* ---------------- page head ---------------- */
-    .phead h1{margin:0;font-size:25px;font-weight:800;letter-spacing:-.035em;color:var(--ink)}
-    .phead p{margin:4px 0 0;color:var(--muted);font-size:12.5px}
-
-    /* ---------------- cards ---------------- */
-    .box{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);
-      padding:15px;height:100%}
-    /* Charts and tables get their card from their own testid rather than from a
-       wrapper. The previous approach matched an ancestor with
-       :has(> div > div > .cardmark), which meant guessing how deeply Streamlit
-       nests its blocks -- the guess was wrong and the cards rendered unstyled.
-       A title and the element below it are drawn as two halves of one card:
-       the title carries the top corners and no bottom border, the element the
-       bottom corners and no top border, so they read as a single surface
-       without either needing to contain the other. */
-    /* The title is a label above the card, not the card's own top edge.
-       Making it the top edge required the two elements to sit flush, and
-       Streamlit sizes an element container from its text while ignoring
-       padding on a child -- measured in a local harness, a 44.6px title
-       inside a 28.6px container. It overflowed onto the chart, and closing
-       the gap with a negative margin only moved the overlap from 7px to 16px.
-       A plain label sidesteps the whole interaction. */
-    .chart-title{
-      font-size:13px;font-weight:700;color:var(--ink);letter-spacing:-.01em;
-      margin:2px 0 0;padding:0 2px}
-    [data-testid="stPlotlyChart"],
-    [data-testid="stDataFrame"]{
-      background:var(--card);border:1.5px solid var(--line);
-      border-radius:var(--r);padding:10px 12px}
-    /* Plotly anchors its toolbar to the plot, which reaches the card's padding
-       edge, so it protruded 11px past the border. Pull it inside and let it
-       fade in on hover rather than sitting on the chart permanently. */
-    [data-testid="stPlotlyChart"] .modebar{
-      right:18px!important;top:8px!important;
-      opacity:0;transition:opacity .15s ease}
-    [data-testid="stPlotlyChart"]:hover .modebar{opacity:1}
-    [data-testid="stPlotlyChart"] .modebar-btn{color:var(--muted)!important}
-    .cardmark{display:none}
-    .box.dark{background:var(--g900);border-color:var(--g900);color:#fff}
-    .box h3{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
-    .box.dark h3{color:#fff}
-    .kpi .lb{display:flex;justify-content:space-between;align-items:center;gap:8px;
-      font-size:12.5px;font-weight:600;color:var(--ink-2)}
-    .box.dark .lb{color:#DCEEE4}
-    .arw{width:25px;height:25px;border-radius:50%;border:1.5px solid var(--line);display:grid;
-      place-items:center;font-size:10px;color:var(--muted);flex:none}
-    .box.dark .arw{border-color:rgba(255,255,255,.28);background:#fff;color:var(--g900)}
-    .kpi .v{font-size:31px;font-weight:800;margin:8px 0 7px;letter-spacing:-.04em}
-    .kpi .d{font-size:10.5px;display:flex;align-items:center;gap:5px;color:var(--muted);flex-wrap:wrap}
-    .kpi .d i{font-style:normal;background:var(--g100);color:var(--g700);border-radius:5px;
-      padding:1px 5px;font-weight:700}
-    .box.dark .d{color:#9FC5AF}
-    .box.dark .d i{background:rgba(255,255,255,.14);color:#fff}
-    .kpi .d.warn i{background:var(--red-bg);color:var(--red)}
-
-    /* ---------------- rows, chips, gauge ---------------- */
-    .rows{display:flex;flex-direction:column;gap:10px}
-    .row{display:flex;align-items:center;gap:10px}
-    .sq{width:26px;height:26px;border-radius:9px;flex:none;display:grid;place-items:center;
-      font-size:9.5px;font-weight:800;color:#fff}
-    .row b{display:block;font-size:12px;font-weight:700;color:var(--ink)}
-    .row small{display:block;font-size:10.5px;color:var(--muted);margin-top:1px}
-    .row .amt{margin-left:auto;font-size:11.5px;font-weight:700;white-space:nowrap}
-    .tag{margin-left:auto;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
-    .tag.up{background:var(--g50);color:var(--g700)}
-    .tag.dn{background:var(--red-bg);color:var(--red)}
-    .tag.fl{background:var(--amber-bg);color:var(--amber)}
-    .gwrap{display:grid;place-items:center;padding-top:2px}
-    .gwrap .in{position:relative;width:172px;height:99px}
-    .gwrap .val{position:absolute;left:0;right:0;bottom:0;text-align:center}
-    .gwrap .val b{display:block;font-size:28px;font-weight:800;letter-spacing:-.04em;color:var(--ink)}
-    .gwrap .val small{font-size:10.5px;color:var(--muted)}
-    .foot{font-size:10.5px;color:var(--muted);margin:11px 0 0;line-height:1.5}
-    .box.dark .foot{color:#9FC5AF}
-    .big-alert{font-size:19px;font-weight:800;letter-spacing:-.03em;line-height:1.25;
-      margin:0 0 6px;color:var(--red)}
-
-    /* ---------------- controls ---------------- */
-    .stButton button{border-radius:20px;font-weight:700;font-size:12.5px;border:1.5px solid var(--line);
-      background:var(--card);color:var(--ink);padding:7px 16px}
-    .stButton button[kind="primary"]{background:var(--g700);border-color:var(--g700);color:#fff}
-    .stSelectbox label,.stMultiSelect label,.stDateInput label{
-      font-size:11px!important;font-weight:700;color:var(--muted);
-      letter-spacing:.08em;text-transform:uppercase}
-    .stSelectbox div[data-baseweb="select"] > div,.stDateInput input{
-      border-radius:12px!important;border-color:var(--line)!important;background:var(--card)!important}
-    .stTabs [data-baseweb="tab-list"]{gap:4px;border-bottom:1.5px solid var(--line)}
-    .stTabs [data-baseweb="tab"]{font-size:12.5px!important;font-weight:600;color:var(--muted);
-      padding:8px 13px}
-    .stTabs [aria-selected="true"]{color:var(--ink)!important;font-weight:700}
-    .stDataFrame{font-variant-numeric:tabular-nums;font-size:12.5px}
-    [data-testid="stMetricValue"]{font-variant-numeric:tabular-nums}
-    h1,h2,h3,h4{color:var(--ink);letter-spacing:-.02em}
-    h2{font-size:1.3rem!important} h3{font-size:1.05rem!important}
-    .login-box{max-width:430px;margin:4rem auto;padding:2.2rem;background:var(--card);
-      border-radius:var(--r);border:1.5px solid var(--line)}
-    .login-box h2{text-align:center;margin-bottom:.2rem}
-    .login-box p{text-align:center;color:var(--muted);margin-bottom:1.2rem}
-    .upload-info{background:var(--g50);border:1.5px solid var(--g100);border-radius:14px;
-      padding:12px 16px;margin-bottom:12px;font-size:12.5px}
+    .stTabs [data-baseweb="tab-list"]{gap:2px;border-bottom:1px solid var(--line)}
+    .stTabs [data-baseweb="tab"]{font-size:.86rem;font-weight:600;color:var(--muted)}
+    .stTabs [aria-selected="true"]{color:var(--ink)!important}
+    .stButton button,.stDownloadButton button{
+      border-radius:9px;font-weight:600;font-size:.85rem;border:1px solid var(--line)}
+    .stDataFrame{font-variant-numeric:tabular-nums}
     </style>
     """, unsafe_allow_html=True)
 
 
+TENANT_HUES = ["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E", "#7A5230",
+               "#2E9160", "#9E6B4A", "#4A6B7B", "#7B4A6B"]
+CHART_PALETTE = TENANT_HUES
+GREEN, GREEN_D, OCHRE, FLAT = "#1A6B3F", "#103D28", "#C08A2C", "#F0F1EE"
 
 
 def tenant_hue(tenant_id, name=""):
-    """
-    Stable colour per tenant, keyed on tenant_id so a brand keeps its mark on
-    every page and in every chart.
-
-    Keyed on the id rather than a hash of the name, because hashing names
-    collides -- "Ruuang Kopi" and "Omonyo" landed on the same hue -- and two
-    tenants sharing a colour destroys the one thing the colour is there to say.
-    """
-    digits = "".join(ch for ch in str(tenant_id or "") if ch.isdigit())
+    """Stable colour per tenant, keyed on id so a rename keeps the hue."""
+    digits = "".join(c for c in str(tenant_id or "") if c.isdigit())
     key = int(digits) if digits else sum(ord(c) for c in str(name or tenant_id))
     return TENANT_HUES[key % len(TENANT_HUES)]
 
 
-def initials(name):
-    parts = [p for p in str(name).replace("'", " ").split() if p]
-    if not parts: return "?"
-    if len(parts) == 1: return parts[0][:2].upper()
-    return (parts[0][0] + parts[1][0]).upper()
+def fmt_rp(val):
+    if val >= 1_000_000_000: return f"Rp {val/1_000_000_000:,.2f} M"
+    if val >= 1_000_000:     return f"Rp {val/1_000_000:,.1f} Jt"
+    return f"Rp {val:,.0f}"
 
 
-def render_header(subtitle=None):
-    user = st.session_state.get("user", {})
-    name = user.get("display_name", "Pengguna")
-    st.markdown(f"""
-    <div class="topbar">
-      <div class="search"><span>&#9906;</span><span>Cari tenant atau unit</span>
-        <span class="kbd">Ctrl K</span></div>
-      <div style="display:flex;align-items:center;gap:9px">
-        <div class="av">{initials(name)}</div>
-        <div class="who"><b>{name}</b><small>{user.get('role','')}</small></div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+def id_num(n, dec=0):
+    return f"{n:,.{dec}f}".replace(",", "#").replace(".", ",").replace("#", ".")
 
 
-def render_page_head(title, sub=""):
-    st.markdown(f'<div class="phead"><h1>{title}</h1><p>{sub}</p></div>',
-                unsafe_allow_html=True)
+def page_head(title, subtitle=None):
+    st.header(title, anchor=False)
+    if subtitle:
+        st.caption(subtitle)
 
 
-def render_kpi(label, value, delta=None, variant="", caption=None, featured=False):
-    """One KPI tile. featured=True inverts it to the dark card, which is how
-    the design marks the single figure that matters most."""
-    d = ""
-    if delta is not None:
-        cls = "warn" if delta < 0 else ""
-        arrow = "&#8593;" if delta >= 0 else "&#8595;"
-        tail = f"<span>{caption}</span>" if caption else ""
-        d = f'<div class="d {cls}"><i>{arrow} {abs(delta):.1f}%</i>{tail}</div>'
-    elif caption:
-        d = f'<div class="d">{caption}</div>'
-    st.markdown(f"""
-    <div class="box kpi {'dark' if featured else ''}">
-      <div class="lb">{label}<span class="arw">&#8599;</span></div>
-      <div class="v num">{value}</div>
-      {d}
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def rows_html(items):
-    """items: list of (tenant_id, name, sub, right_html). Returns markup so the
-    caller can emit a whole card in a single st.markdown call."""
-    body = "".join(
-        f'<div class="row"><span class="sq" style="background:{tenant_hue(tid, n)}">'
-        f'{initials(n)}</span><div><b>{n}</b><small>{s}</small></div>{r}</div>'
-        for tid, n, s, r in items)
-    return f'<div class="rows">{body}</div>'
-
-
-def render_card(title, inner, foot=None, dark=False):
-    """A complete card in one call -- the only way an HTML card wrapper
-    survives Streamlit's per-call sanitising."""
-    f = f'<p class="foot">{foot}</p>' if foot else ""
-    st.markdown(f'<div class="box{" dark" if dark else ""}"><h3>{title}</h3>{inner}{f}</div>',
-                unsafe_allow_html=True)
-
-
-def move_tag(pct):
-    if pct is None: return '<span class="tag fl">baru</span>'
-    cls = "up" if pct >= 0 else ("dn" if pct <= -10 else "fl")
-    arrow = "&#8593;" if pct >= 0 else "&#8595;"
-    return f'<span class="tag {cls}">{arrow} {abs(pct):.1f}%</span>'
-
-
-def gauge_html(pct, label):
-    """Half-circle arc as SVG rather than a Plotly indicator, so the stroke
-    caps stay round and it sits inside the card system like any other markup."""
-    p = max(0.0, min(float(pct), 1.0))
-    length = 214.0
-    return f"""
-    <div class="gwrap"><div class="in">
-      <svg width="172" height="99" viewBox="0 0 170 98" aria-label="{label} {p*100:.0f} persen">
-        <path d="M17 90 A68 68 0 0 1 153 90" fill="none" stroke="#F3F4F1"
-              stroke-width="17" stroke-linecap="round"/>
-        <path d="M17 90 A68 68 0 0 1 153 90" fill="none" stroke="#1A6B3F" stroke-width="17"
-              stroke-linecap="round" stroke-dasharray="{length}"
-              stroke-dashoffset="{length * (1 - p):.1f}"/>
-      </svg>
-      <div class="val"><b class="num">{p*100:.0f}%</b><small>{label}</small></div>
-    </div></div>"""
-
-
-def show_chart(fig, **kw):
+def card(title=None, subtitle=None):
     """
-    Render a chart with its title lifted out of the plot.
+    A card is a bordered Streamlit container -- nothing else.
 
-    A Plotly title lives inside the figure's top margin, which is the same
-    strip the legend occupies -- the two collided on every chart that had
-    both. Promoting the title to a real heading above the chart removes the
-    conflict at the source rather than tuning coordinates against it, and the
-    heading then matches the card titles around it instead of being styled by
-    the plotting library.
+    Use as `with card("Title"):`. Because Streamlit builds and measures the
+    container itself, its height always matches what is inside it.
     """
-    title = None
-    try:
-        title = fig.layout.title.text
-    except Exception:
-        pass
+    c = st.container(border=True)
     if title:
-        fig.update_layout(title=None)
-        st.markdown(f'<div class="chart-title">{title}</div>', unsafe_allow_html=True)
-    kw.setdefault("use_container_width", True)
-    # Zoom, pan and reset-to-fit stay available; only the export and lasso
-    # buttons are dropped, since they duplicate the export row and do nothing
-    # useful on these chart types.
-    kw.setdefault("config", {
+        c.markdown(f"###### {title}")
+    if subtitle:
+        c.caption(subtitle)
+    return c
+
+
+def kpi(col, label, value, delta=None, help=None):
+    """One metric in a bordered container, using st.metric rather than markup."""
+    with col.container(border=True):
+        st.metric(label, value, delta=delta, help=help)
+
+
+def show_chart(fig, height=None):
+    """Charts inherit the grove template; only the toolbar config is set here."""
+    if height:
+        fig.update_layout(height=height)
+    st.plotly_chart(fig, use_container_width=True, config={
         "displayModeBar": True, "displaylogo": False,
         "modeBarButtonsToRemove": ["lasso2d", "select2d", "toImage",
                                    "autoScale2d", "toggleSpikelines"],
         "scrollZoom": False})
-    st.plotly_chart(fig, **kw)
 
 
-def fmt_rp(val):
-    if val >= 1_000_000_000: return f"Rp {val/1_000_000_000:,.1f} M"
-    if val >= 1_000_000: return f"Rp {val/1_000_000:,.1f} Jt"
-    return f"Rp {val:,.0f}"
+def tenant_table(df, cols, height=None):
+    """
+    Leaderboards and breakdowns as a real dataframe.
+
+    Hand-built rows of HTML were the single largest source of overlap; a
+    dataframe is measured by Streamlit, sorts itself, and still carries
+    progress bars and sparklines through column_config.
+    """
+    st.dataframe(df, use_container_width=True, hide_index=True,
+                 height=height, column_config=cols)
+
+
+# --- names the rest of the app still calls -------------------------------
+def _plain(x):
+    """Strip any leftover markup so old fragments render as text, not tags."""
+    return re.sub(r"<[^>]+>", "", str(x)).replace("&rarr;", "->").replace("&amp;", "&").strip()
+
+
+def move_tag(pct):
+    """Plain text now; it used to be an HTML pill inside a hand-built row."""
+    if pct is None: return "baru"
+    return f"{'+' if pct >= 0 else ''}{pct:.1f}%"
+
+
+def rows_html(items):
+    """
+    items: (tenant_id, name, sub, right) -> DataFrame.
+
+    The name is unchanged so the 9 call sites need no edit, but it no longer
+    returns markup. Hand-built rows of HTML were the single largest source of
+    the overlapping layout, because Streamlit never measured them.
+    """
+    return pd.DataFrame([{"Nama": n, "Keterangan": s, "Nilai": _plain(r)}
+                         for _, n, s, r in items])
+
+
+def gauge_html(pct, label):
+    """Returns the pair (value, label); render_card turns it into a metric."""
+    return ("gauge", max(0.0, min(float(pct), 1.0)), label)
+
+
+def render_card(title, inner, foot=None, dark=False):
+    """
+    A bordered container whose body is chosen by what it was handed:
+    a DataFrame becomes a table, a gauge tuple becomes a metric with a
+    progress bar, anything else is rendered as text.
+    """
+    with st.container(border=True):
+        st.markdown(f"###### {title}")
+        if isinstance(inner, pd.DataFrame):
+            if not inner.empty:
+                st.dataframe(inner, use_container_width=True, hide_index=True)
+        elif isinstance(inner, tuple) and inner and inner[0] == "gauge":
+            _, p, lb = inner
+            st.metric("Capaian", f"{p*100:.0f}%")
+            st.progress(p)
+            st.caption(lb)
+        elif inner:
+            st.markdown(_plain(inner))
+        if foot:
+            st.caption(_plain(foot))
+
+
+
+def render_header(subtitle=None):
+    """No-op. The search bar and user chip were decoration built from raw HTML;
+    the identity already lives in the sidebar, so the markup is simply gone."""
+    return None
+
+
+def render_page_head(title, sub=""):
+    page_head(title, sub or None)
+
+
+def initials(name):
+    p = [x for x in str(name).replace("'", " ").split() if x]
+    if not p: return "?"
+    return (p[0][:2] if len(p) == 1 else p[0][0] + p[1][0]).upper()
+
+
+def render_kpi(label, value, delta=None, variant="", caption=None, featured=False):
+    """Compatibility shim: the old signature, a native metric underneath."""
+    d = f"{delta:+.1f}%" if isinstance(delta, (int, float)) else None
+    with st.container(border=True):
+        st.metric(label, value, delta=d)
+        if caption:
+            st.caption(caption)
 
 
 # ============================================================================
@@ -1004,14 +879,9 @@ def render_sidebar():
     role = user["role"]
     with st.sidebar:
         stats = get_db().get_db_stats()
-        st.markdown(f"""
-        <div class="sb-logo"><span class="mark">G</span><b>GROVE</b></div>
-        <div class="sb-who"><b>{user['display_name']}</b><small>{role}</small></div>
-        <div class="sb-stats">
-          <span>F&amp;B {stats["sales_rows"]:,}</span>
-          <span>Playground {stats["pg_rows"]:,}</span>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("### GROVE")
+        st.caption(f"{user['display_name']} · {role}")
+        st.caption(f"F&B {stats['sales_rows']:,} · Playground {stats['pg_rows']:,}")
         st.divider()
 
         menu = [
@@ -2259,9 +2129,8 @@ def sec_trend(d, cfg):
 
     c = st.columns([2, 1])
     with c[0]:
-        if True:
-            st.markdown('<div class="chart-title">Tren penjualan harian</div>',
-                        unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("###### Tren penjualan harian")
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=g["day"], y=g["v"], mode="lines", line=dict(color=GREEN, width=2),
@@ -2278,26 +2147,21 @@ def sec_trend(d, cfg):
     with c[1]:
         best, worst = g.loc[g["v"].idxmax()], g.loc[g["v"].idxmin()]
         span = (g["day"].max() - g["day"].min()).days + 1
-        render_card("Ringkasan periode",
-            f'<div class="rows">'
-            f'<div class="row"><div><b>Hari tertinggi</b>'
-            f'<small>{best["day"]:%d %b %Y}</small></div>'
-            f'<span class="amt num">{fmt_rp(best["v"])}</span></div>'
-            f'<div class="row"><div><b>Hari terendah</b>'
-            f'<small>{worst["day"]:%d %b %Y}</small></div>'
-            f'<span class="amt num">{fmt_rp(worst["v"])}</span></div>'
-            f'<div class="row"><div><b>Rata-rata harian</b>'
-            f'<small>{len(g)} hari berdagang dari {span} hari</small></div>'
-            f'<span class="amt num">{fmt_rp(g["v"].mean())}</span></div>'
-            f'</div>',
+        render_card("Ringkasan periode", pd.DataFrame([
+            {"Ukuran": "Hari tertinggi", "Keterangan": f"{best['day']:%d %b %Y}",
+             "Nilai": fmt_rp(best["v"])},
+            {"Ukuran": "Hari terendah", "Keterangan": f"{worst['day']:%d %b %Y}",
+             "Nilai": fmt_rp(worst["v"])},
+            {"Ukuran": "Rata-rata harian",
+             "Keterangan": f"{len(g)} hari berdagang dari {span} hari",
+             "Nilai": fmt_rp(g["v"].mean())}]),
             foot="Hari tanpa transaksi tidak ikut menurunkan rata-rata.")
 
     days = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
     dow = (d.assign(w=d["sales_date"].dt.dayofweek)
              .groupby("w")[cfg["val"]].mean().reindex(range(7), fill_value=0))
-    if True:
-        st.markdown('<div class="chart-title">Rata-rata per hari dalam seminggu</div>',
-                    unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("###### Rata-rata per hari dalam seminggu")
         show_chart(_bars_vs_avg(days, [float(dow.get(i, 0)) for i in range(7)]))
 
 
@@ -2310,8 +2174,8 @@ def sec_weekly(d, cfg):
     g["wow"] = g["v"].pct_change() * 100
     g["per"] = (g["v"] / g["c"].replace(0, pd.NA)).fillna(0).round()
 
-    if True:
-        st.markdown('<div class="chart-title">Penjualan per minggu</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("###### Penjualan per minggu")
         show_chart(_bars_vs_avg(g["label"].tolist(), g["v"].tolist(), height=230))
 
     render_card("Perubahan antar minggu",
@@ -2334,8 +2198,8 @@ def sec_monthly(d, cfg):
 
     c = st.columns([2, 1])
     with c[0]:
-        if True:
-            st.markdown('<div class="chart-title">Penjualan per bulan</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("###### Penjualan per bulan")
             show_chart(_bars_vs_avg(g["mo"].tolist(), g["v"].tolist(), height=240))
     with c[1]:
         render_card("Perbandingan bulan",
@@ -2350,8 +2214,8 @@ def sec_deep(d, cfg, extra_cols=None):
     g = _daily(d, cfg["val"], cfg["cnt"])
     g["per"] = (g["v"] / g["c"].replace(0, pd.NA)).fillna(0).round()
     g["day"] = pd.to_datetime(g["day"])
-    if True:
-        st.markdown('<div class="chart-title">Rincian harian</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("###### Rincian harian")
         st.dataframe(
             g.rename(columns={"day": "Tanggal", "v": "Nett Sales (Rp)",
                               "c": cfg["cnt_label"], "per": f"Rata {cfg['per_label']} (Rp)"}),
@@ -2437,8 +2301,8 @@ def page_dashboard_fnb():
         hourly = df.groupby("hr").agg(v=("nett_sales", "sum"), p=("pax_total", "sum")).reset_index()
         c = st.columns([2, 1])
         with c[0]:
-            if True:
-                st.markdown('<div class="chart-title">Penjualan per jam</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("###### Penjualan per jam")
                 show_chart(_bars_vs_avg([f"{h:02d}" for h in hourly["hr"]],
                                         hourly["v"].tolist(), height=240))
         with c[1]:
@@ -2452,8 +2316,8 @@ def page_dashboard_fnb():
         heat = (df.assign(w=df["sales_date"].dt.dayofweek)
                   .pivot_table(index="w", columns="hr", values="nett_sales", aggfunc="sum")
                   .reindex(range(7)).fillna(0))
-        if True:
-            st.markdown('<div class="chart-title">Peta jam × hari</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("###### Peta jam × hari")
             fig = go.Figure(go.Heatmap(
                 z=heat.values, x=[f"{int(c):02d}" for c in heat.columns],
                 y=["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"],
@@ -2471,9 +2335,8 @@ def page_dashboard_fnb():
                                              p=("pax_total", "sum")).reset_index()
             c = st.columns([1, 2])
             with c[0]:
-                if True:
-                    st.markdown('<div class="chart-title">Kontribusi segmen</div>',
-                                unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown("###### Kontribusi segmen")
                     fig = go.Figure(go.Pie(labels=agg["segment"], values=agg["v"], hole=.62,
                         marker=dict(colors=[GREEN, OCHRE, "#6B7B3A"], line=dict(color="#fff", width=2)),
                         textinfo="percent", hovertemplate="%{label}<br>Rp %{value:,.0f}<extra></extra>"))
@@ -2722,9 +2585,8 @@ def page_performance():
     c = st.columns([2, 1, 1])
     with c[0]:
         # Holds a chart, so it is a bordered container rather than HTML.
-        if True:
-            st.markdown('<div class="chart-title">Penjualan per hari</div>',
-                        unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("###### Penjualan per hari")
             days = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
             daily = (cur_df.assign(dow=cur_df["sales_date"].dt.dayofweek)
                            .groupby("dow")["nett_sales"].sum()
@@ -2813,16 +2675,11 @@ def page_performance():
             f'{"#2E9160" if i < occupied else "rgba(255,255,255,.2)"}"></i>'
             for i in range(max(n_units, 1)))
         empty = n_units - occupied
-        st.markdown(f"""
-        <div class="box dark">
-          <div class="lb">Okupansi unit<span class="arw">&#8599;</span></div>
-          <div class="v num" style="font-size:31px;font-weight:800;margin:8px 0 2px;
-               letter-spacing:-.04em">{occupied} / {n_units}</div>
-          <div class="foot" style="margin-top:2px">
-            {"Seluruh unit terisi" if empty == 0 and n_units else
-             f"{empty} unit tanpa penyewa aktif"}</div>
-          <div style="display:flex;gap:5px;margin-top:12px">{bars}</div>
-        </div>""", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.metric("Okupansi unit", f"{occupied} / {n_units}")
+            st.progress(occupied / n_units if n_units else 0.0)
+            st.caption("Seluruh unit terisi" if empty == 0 and n_units
+                       else f"{empty} unit tanpa penyewa aktif")
 
     # ---------------- per unit ----------------
     if "unit_code" in cur_df.columns and cur_df["unit_code"].notna().any():
@@ -2830,9 +2687,8 @@ def page_performance():
                           .agg(sales=("nett_sales", "sum"), visitors=("visitors", "sum"),
                                brand=("tenant_name", lambda s: ", ".join(sorted(set(s)))))
                           .reset_index().sort_values("sales", ascending=False))
-        if True:
-            st.markdown('<div class="chart-title">Performa per unit</div>',
-                        unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("###### Performa per unit")
             st.dataframe(per_unit, use_container_width=True, hide_index=True,
                 column_config={
                     "unit_code": st.column_config.TextColumn("Unit"),
@@ -3260,9 +3116,8 @@ def page_upload_playground():
 def _export_row(df, label, dr, kind="fnb"):
     """The four export buttons, identical on both dashboards."""
     s, e = (dr[0], dr[1]) if isinstance(dr, tuple) else (date.today(), date.today())
-    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-    if True:
-        st.markdown('<div class="chart-title">Ekspor</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("###### Ekspor")
         c = st.columns(4)
         if kind == "fnb":
             with c[0]:
@@ -3348,9 +3203,8 @@ def page_dashboard_playground():
         daily.columns = ["day", "anak", "pendamping"]
         c = st.columns([2, 1])
         with c[0]:
-            if True:
-                st.markdown('<div class="chart-title">Anak dan pendamping per hari</div>',
-                            unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("###### Anak dan pendamping per hari")
                 fig = go.Figure()
                 fig.add_bar(x=daily["day"], y=daily["anak"], name="Anak",
                             marker_color=GREEN,
@@ -3364,18 +3218,14 @@ def page_dashboard_playground():
         with c[1]:
             ratio = comp / child if child else 0
             solo = int((df["companion_total"] == 0).sum())
-            render_card("Komposisi kunjungan",
-                f'<div class="rows">'
-                f'<div class="row"><div><b>Rasio pendamping</b>'
-                f'<small>pendamping per satu anak</small></div>'
-                f'<span class="amt num">{ratio:.2f}</span></div>'
-                f'<div class="row"><div><b>Total pendamping</b>'
-                f'<small>{comp/trx:.2f} per transaksi</small></div>'
-                f'<span class="amt num">{comp:,.0f}</span></div>'
-                f'<div class="row"><div><b>Tanpa pendamping</b>'
-                f'<small>{solo/trx*100:.1f}% dari transaksi</small></div>'
-                f'<span class="amt num">{solo:,.0f}</span></div>'
-                f'</div>'.replace(",", "."),
+            render_card("Komposisi kunjungan", pd.DataFrame([
+                {"Ukuran": "Rasio pendamping", "Keterangan": "pendamping per satu anak",
+                 "Nilai": f"{ratio:.2f}"},
+                {"Ukuran": "Total pendamping", "Keterangan": f"{comp/trx:.2f} per transaksi",
+                 "Nilai": id_num(comp)},
+                {"Ukuran": "Tanpa pendamping",
+                 "Keterangan": f"{solo/trx*100:.1f}% dari transaksi",
+                 "Nilai": id_num(solo)}]),
                 foot="Rasio di bawah 1 berarti sebagian anak datang tanpa pendamping berbayar.")
 
     with t[2]:
@@ -3387,9 +3237,8 @@ def page_dashboard_playground():
         agg["per_day"] = agg["v"] / agg["d"].replace(0, pd.NA)
         c = st.columns([1, 2])
         with c[0]:
-            if True:
-                st.markdown('<div class="chart-title">Rata-rata per hari</div>',
-                            unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("###### Rata-rata per hari")
                 fig = go.Figure(go.Bar(
                     x=agg["label"], y=agg["per_day"],
                     marker=dict(color=[GREEN, OCHRE][:len(agg)]),
@@ -3477,9 +3326,8 @@ def page_master_dashboard():
     with t[0]:
         c = st.columns([1, 2])
         with c[0]:
-            if True:
-                st.markdown('<div class="chart-title">Kontribusi pendapatan</div>',
-                            unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("###### Kontribusi pendapatan")
                 fig = go.Figure(go.Pie(
                     labels=["F&B", "Playground"], values=[fnb_nett, pg_nett], hole=.62,
                     marker=dict(colors=[C_FNB, C_PG], line=dict(color="#fff", width=2)),
@@ -3513,9 +3361,8 @@ def page_master_dashboard():
         else:
             f_v = [float(d_fnb.get(i, 0)) for i in idx]
             p_v = [float(d_pg.get(i, 0)) for i in idx]
-            if True:
-                st.markdown('<div class="chart-title">Pendapatan harian</div>',
-                            unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("###### Pendapatan harian")
                 fig = go.Figure()
                 fig.add_bar(x=idx, y=f_v, name="F&B", marker_color=C_FNB,
                             hovertemplate="%{x|%d %b}<br>F&B Rp %{y:,.0f}<extra></extra>")
@@ -3524,9 +3371,8 @@ def page_master_dashboard():
                 fig.update_layout(barmode="stack", height=300,
                                   margin=dict(t=10, b=34, l=56, r=14))
                 show_chart(fig)
-            if True:
-                st.markdown('<div class="chart-title">Tren gabungan</div>',
-                            unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("###### Tren gabungan")
                 fig = go.Figure()
                 fig.add_scatter(x=idx, y=[a + b for a, b in zip(f_v, p_v)], name="Total",
                                 mode="lines", line=dict(color=GREEN_D, width=2.5),
@@ -3547,9 +3393,8 @@ def page_master_dashboard():
         else:
             f_v = [float(m_fnb.get(m, 0)) for m in months]
             p_v = [float(m_pg.get(m, 0)) for m in months]
-            if True:
-                st.markdown('<div class="chart-title">Pendapatan per bulan</div>',
-                            unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("###### Pendapatan per bulan")
                 fig = go.Figure()
                 fig.add_bar(x=months, y=f_v, name="F&B", marker_color=C_FNB,
                             hovertemplate="%{x}<br>F&B Rp %{y:,.0f}<extra></extra>")
@@ -3560,7 +3405,7 @@ def page_master_dashboard():
                 show_chart(fig)
             tbl = pd.DataFrame({"Bulan": months, "F&B (Rp)": f_v, "Playground (Rp)": p_v,
                                 "Total (Rp)": [a + b for a, b in zip(f_v, p_v)]})
-            st.markdown('<div class="chart-title">Ringkasan bulanan</div>', unsafe_allow_html=True)
+            st.markdown("###### Ringkasan bulanan")
             st.dataframe(tbl, use_container_width=True, hide_index=True,
                 column_config={
                     "F&B (Rp)":        st.column_config.NumberColumn(format="localized"),
@@ -3568,8 +3413,7 @@ def page_master_dashboard():
                     "Total (Rp)":      st.column_config.NumberColumn(format="localized"),
                 })
 
-    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="chart-title">Ekspor</div>', unsafe_allow_html=True)
+    st.markdown("###### Ekspor")
     ec = st.columns(4)
     s_, e_ = dr[0], dr[1]
     with ec[0]:
