@@ -2183,12 +2183,173 @@ tr:nth-child(even){{background:#f9f9f9;}}.page-break{{page-break-after:auto;}}
 # ============================================================================
 # DASHBOARD
 # ============================================================================
+# ============================================================================
+# SHARED DASHBOARD SECTIONS
+# ----------------------------------------------------------------------------
+# Four of the six sections on each dashboard are the same analysis over
+# different measures -- F&B counts pax, Playground counts children plus
+# companions. Building them once, parameterised by column name, keeps the two
+# pages from drifting apart visually and halves the surface where a bug can
+# hide.
+# ============================================================================
+GREEN, GREEN_D, OCHRE, LINE_C = "#1A6B3F", "#103D28", "#C08A2C", "#EBECE8"
+FLAT = "#F3F4F1"
+
+
+def _daily(d, val, cnt):
+    g = d.groupby(d["sales_date"].dt.date).agg(v=(val, "sum"), c=(cnt, "sum")).reset_index()
+    g.columns = ["day", "v", "c"]
+    return g
+
+
+def _bars_vs_avg(x, y, height=210, hatch_below=True):
+    """Bars that carry their own threshold: solid at or above the mean of the
+    trading periods, hatched below it. Empty periods stay flat rather than
+    drawn as stubs, which would read as a real but tiny figure."""
+    act = [v for v in y if v > 0]
+    avg = sum(act) / len(act) if act else 0
+    fig = go.Figure(go.Bar(
+        x=x, y=y,
+        marker=dict(color=[GREEN if v >= avg and v > 0 else FLAT for v in y],
+                    pattern=dict(shape=["" if (v >= avg and v > 0) else ("/" if hatch_below else "")
+                                        for v in y],
+                                 fgcolor="#D9DDD7", size=5, solidity=.3)),
+        hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"))
+    fig.update_layout(height=height, showlegend=False, bargap=.34,
+                      yaxis=dict(visible=False), margin=dict(t=10, b=34, l=10, r=10))
+    return fig
+
+
+def sec_trend(d, cfg):
+    g = _daily(d, cfg["val"], cfg["cnt"])
+    if g.empty:
+        st.info("Tidak ada data pada rentang ini."); return
+
+    c = st.columns([2, 1])
+    with c[0]:
+        with card_container():
+            st.markdown('<div class="chart-title">Tren penjualan harian</div>',
+                        unsafe_allow_html=True)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=g["day"], y=g["v"], mode="lines", line=dict(color=GREEN, width=2),
+                fill="tozeroy", fillcolor="rgba(26,107,63,.10)",
+                hovertemplate="%{x|%d %b}<br>Rp %{y:,.0f}<extra></extra>"))
+            peak = g.loc[g["v"].idxmax()]
+            fig.add_trace(go.Scatter(
+                x=[peak["day"]], y=[peak["v"]], mode="markers",
+                marker=dict(color=GREEN, size=9), hoverinfo="skip", showlegend=False))
+            fig.update_layout(height=250, showlegend=False,
+                              margin=dict(t=10, b=34, l=54, r=14))
+            show_chart(fig)
+
+    with c[1]:
+        best, worst = g.loc[g["v"].idxmax()], g.loc[g["v"].idxmin()]
+        span = (g["day"].max() - g["day"].min()).days + 1
+        render_card("Ringkasan periode",
+            f'<div class="rows">'
+            f'<div class="row"><div><b>Hari tertinggi</b>'
+            f'<small>{best["day"]:%d %b %Y}</small></div>'
+            f'<span class="amt num">{fmt_rp(best["v"])}</span></div>'
+            f'<div class="row"><div><b>Hari terendah</b>'
+            f'<small>{worst["day"]:%d %b %Y}</small></div>'
+            f'<span class="amt num">{fmt_rp(worst["v"])}</span></div>'
+            f'<div class="row"><div><b>Rata-rata harian</b>'
+            f'<small>{len(g)} hari berdagang dari {span} hari</small></div>'
+            f'<span class="amt num">{fmt_rp(g["v"].mean())}</span></div>'
+            f'</div>',
+            foot="Hari tanpa transaksi tidak ikut menurunkan rata-rata.")
+
+    days = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+    dow = (d.assign(w=d["sales_date"].dt.dayofweek)
+             .groupby("w")[cfg["val"]].mean().reindex(range(7), fill_value=0))
+    with card_container():
+        st.markdown('<div class="chart-title">Rata-rata per hari dalam seminggu</div>',
+                    unsafe_allow_html=True)
+        show_chart(_bars_vs_avg(days, [float(dow.get(i, 0)) for i in range(7)]))
+
+
+def sec_weekly(d, cfg):
+    w = d.assign(wk=d["sales_date"].dt.to_period("W").apply(lambda p: p.start_time))
+    g = w.groupby("wk").agg(v=(cfg["val"], "sum"), c=(cfg["cnt"], "sum")).reset_index()
+    if g.empty:
+        st.info("Tidak ada data."); return
+    g["label"] = g["wk"].dt.strftime("%d %b")
+    g["wow"] = g["v"].pct_change() * 100
+    g["per"] = (g["v"] / g["c"].replace(0, pd.NA)).fillna(0).round()
+
+    with card_container():
+        st.markdown('<div class="chart-title">Penjualan per minggu</div>', unsafe_allow_html=True)
+        show_chart(_bars_vs_avg(g["label"].tolist(), g["v"].tolist(), height=230))
+
+    render_card("Perubahan antar minggu",
+        rows_html([(f"W{i}", f"Minggu {r['label']}",
+                    f"{fmt_rp(r['per'])} {cfg['per_label']} · {r['c']:,.0f} {cfg['cnt_label'].lower()}"
+                    .replace(",", "."),
+                    move_tag(None if pd.isna(r["wow"]) else r["wow"]))
+                   for i, (_, r) in enumerate(g.iterrows(), 1)]),
+        foot="Minggu pertama tidak punya pembanding, jadi ditandai sebagai baru.")
+
+
+def sec_monthly(d, cfg):
+    m = d.assign(mo=d["sales_date"].dt.to_period("M").astype(str))
+    g = m.groupby("mo").agg(v=(cfg["val"], "sum"), c=(cfg["cnt"], "sum"),
+                            days=("sales_date", lambda s: s.dt.date.nunique())).reset_index()
+    if g.empty:
+        st.info("Tidak ada data."); return
+    g["mom"] = g["v"].pct_change() * 100
+    g["per_day"] = g["v"] / g["days"].replace(0, pd.NA)
+
+    c = st.columns([2, 1])
+    with c[0]:
+        with card_container():
+            st.markdown('<div class="chart-title">Penjualan per bulan</div>', unsafe_allow_html=True)
+            show_chart(_bars_vs_avg(g["mo"].tolist(), g["v"].tolist(), height=240))
+    with c[1]:
+        render_card("Perbandingan bulan",
+            rows_html([(r["mo"], r["mo"],
+                        f"{r['days']} hari · {fmt_rp(r['per_day'])} / hari",
+                        move_tag(None if pd.isna(r["mom"]) else r["mom"]))
+                       for _, r in g.iterrows()]),
+            foot="Rata-rata harian membuat bulan pendek tetap sebanding dengan bulan penuh.")
+
+
+def sec_deep(d, cfg, extra_cols=None):
+    g = _daily(d, cfg["val"], cfg["cnt"])
+    g["per"] = (g["v"] / g["c"].replace(0, pd.NA)).fillna(0).round()
+    g["day"] = pd.to_datetime(g["day"])
+    with card_container():
+        st.markdown('<div class="chart-title">Rincian harian</div>', unsafe_allow_html=True)
+        st.dataframe(
+            g.rename(columns={"day": "Tanggal", "v": "Nett Sales (Rp)",
+                              "c": cfg["cnt_label"], "per": f"Rata {cfg['per_label']} (Rp)"}),
+            use_container_width=True, hide_index=True, height=420,
+            column_config={
+                "Tanggal": st.column_config.DateColumn("Tanggal", format="ddd, DD MMM YYYY"),
+                "Nett Sales (Rp)": st.column_config.NumberColumn(format="localized"),
+                cfg["cnt_label"]: st.column_config.NumberColumn(format="localized"),
+                f"Rata {cfg['per_label']} (Rp)": st.column_config.NumberColumn(format="localized"),
+            })
+    if extra_cols:
+        render_card("Catatan", extra_cols)
+
+
+def _filters(df, key):
+    dmin, dmax = df["sales_date"].min().date(), df["sales_date"].max().date()
+    dr = st.date_input("Rentang tanggal",
+                       value=(max(dmin, dmax - timedelta(days=30)), dmax),
+                       min_value=dmin, max_value=dmax, key=key,
+                       label_visibility="collapsed")
+    if isinstance(dr, tuple) and len(dr) == 2:
+        s, e = pd.Timestamp(dr[0]), pd.Timestamp(dr[1])
+        return df[(df["sales_date"] >= s) & (df["sales_date"] <= e)], dr
+    return df, (dmin, dmax)
+
+
 def page_dashboard_fnb():
     render_header()
-    render_page_head("Dashboard F&B", "Analisis penjualan tenant ESB POS")
     db = get_db()
     user = st.session_state["user"]
-
     tenant_access = user.get("tenant_access", "ALL")
     tenants_df = db.get_tenants()
     if tenant_access == "ALL":
@@ -2196,365 +2357,122 @@ def page_dashboard_fnb():
     else:
         tenant_list = [t.strip() for t in tenant_access.split(",")]
 
-    cf1, cf2, cf3 = st.columns([2, 2, 1])
-    with cf1:
-        sel_tenant = st.selectbox("\U0001f3e2 Tenant", tenant_list)
-
-    filt = None if sel_tenant == "All" else sel_tenant
-    df = db.get_sales_data(filt)
-
-    if df.empty:
-        st.info("\U0001f4ed Belum ada data. Upload file ESB melalui menu **Upload Data**.")
+    hc = st.columns([2, 1, 1])
+    with hc[1]:
+        sel_tenant = st.selectbox("Tenant", tenant_list, label_visibility="collapsed")
+    df_all = db.get_sales_data(None if sel_tenant == "All" else sel_tenant)
+    if df_all.empty:
+        with hc[0]:
+            render_page_head("Dashboard F&B", "Belum ada data")
+        render_card("Belum ada data",
+                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file ESB '
+                    'melalui menu Upload F&amp;B.</p>')
         return
-
-    # Bound the picker to the data, not to the calendar. Defaulting to the last
-    # 30 days of *today* opens the dashboard empty whenever the most recent
-    # upload is older than a month, which reads as a broken page rather than a
-    # filter that excluded everything.
-    dmin, dmax = df["sales_date"].min().date(), df["sales_date"].max().date()
-    with cf2:
-        date_range = st.date_input(
-            "\U0001f4c5 Rentang Tanggal",
-            value=(max(dmin, dmax - timedelta(days=30)), dmax),
-            min_value=dmin, max_value=dmax)
-    with cf3:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("\U0001f504 Refresh", use_container_width=True)
-
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        s, e = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
-        df = df[(df["sales_date"] >= s) & (df["sales_date"] <= e)]
+    with hc[2]:
+        df, dr = _filters(df_all, "fnb_dr")
+    with hc[0]:
+        render_page_head("Dashboard F&B",
+                         f"{sel_tenant} · {dr[0]:%d %b %Y} – {dr[1]:%d %b %Y}")
     if df.empty:
-        st.warning("Tidak ada data pada rentang tanggal yang dipilih.")
+        render_card("Tidak ada data",
+                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Rentang tanggal '
+                    'yang dipilih tidak memuat transaksi.</p>')
         return
 
     df = enrich_df(df)
+    cfg = dict(val="nett_sales", cnt="pax_total", cnt_label="Pax", per_label="per pax")
 
-    t_nett = df["nett_sales"].sum()
-    t_pax = df["pax_total"].sum()
-    t_sub = df["subtotal"].sum()
-    t_disc = df["discount_total"].sum()
-    avg_pax = t_nett / t_pax if t_pax else 0
-    disc_pct = t_disc / t_sub * 100 if t_sub else 0
-    n_days = df["date_only"].nunique()
-    avg_daily = t_nett / n_days if n_days else 0
+    nett, pax = df["nett_sales"].sum(), df["pax_total"].sum()
+    disc, sub = df["discount_total"].sum(), df["subtotal"].sum()
+    ndays = df["sales_date"].dt.date.nunique()
+    k = st.columns(4)
+    with k[0]: render_kpi("Nett Sales", fmt_rp(nett), featured=True,
+                          caption=f"{ndays} hari berdagang")
+    with k[1]: render_kpi("Pax", f"{pax:,.0f}".replace(",", "."),
+                          caption=f"{pax/ndays:,.0f} per hari".replace(",", ".") if ndays else None)
+    with k[2]: render_kpi("Rata per Pax", fmt_rp(nett / pax if pax else 0),
+                          caption="nett dibagi jumlah pax")
+    with k[3]: render_kpi("Diskon", fmt_rp(disc),
+                          caption=f"{disc/sub*100:.1f}% dari subtotal" if sub else None)
 
-    k1,k2,k3,k4,k5 = st.columns(5)
-    with k1: render_kpi("Total Nett Sales", fmt_rp(t_nett))
-    with k2: render_kpi("Total Pax", f"{t_pax:,}", variant="gold")
-    with k3: render_kpi("Avg / Pax", fmt_rp(avg_pax), variant="blue")
-    with k4: render_kpi("Discount Rate", f"{disc_pct:.1f}%", variant="red")
-    with k5: render_kpi("Avg Daily Sales", fmt_rp(avg_daily), variant="orange")
+    t = st.tabs(["Trend Harian", "Analisis Per Jam", "Time Segment",
+                 "Weekly Report", "Monthly Overview", "Deep Dive"])
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    with t[0]:
+        sec_trend(df, cfg)
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "\U0001f4c8 Trend Harian", "\U0001f550 Analisis Per Jam", "\U0001f3e2 Perbandingan Tenant",
-        "\u23f0 Time Segment", "\U0001f4c5 Weekly Report", "\U0001f4c6 Monthly Overview", "\U0001f4ca Deep Dive"
-    ])
+    with t[1]:
+        hourly = df.groupby("hr").agg(v=("nett_sales", "sum"), p=("pax_total", "sum")).reset_index()
+        c = st.columns([2, 1])
+        with c[0]:
+            with card_container():
+                st.markdown('<div class="chart-title">Penjualan per jam</div>', unsafe_allow_html=True)
+                show_chart(_bars_vs_avg([f"{h:02d}" for h in hourly["hr"]],
+                                        hourly["v"].tolist(), height=240))
+        with c[1]:
+            top = hourly.nlargest(5, "v")
+            render_card("Jam tersibuk",
+                rows_html([(f"H{int(r['hr'])}", f"Pukul {int(r['hr']):02d}:00",
+                            f"{r['p']:,.0f} pax".replace(",", "."),
+                            f'<span class="amt num">{fmt_rp(r["v"])}</span>')
+                           for _, r in top.iterrows()]),
+                foot="Lima jam dengan penjualan tertinggi pada rentang ini.")
+        heat = (df.assign(w=df["sales_date"].dt.dayofweek)
+                  .pivot_table(index="w", columns="hr", values="nett_sales", aggfunc="sum")
+                  .reindex(range(7)).fillna(0))
+        with card_container():
+            st.markdown('<div class="chart-title">Peta jam × hari</div>', unsafe_allow_html=True)
+            fig = go.Figure(go.Heatmap(
+                z=heat.values, x=[f"{int(c):02d}" for c in heat.columns],
+                y=["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"],
+                colorscale=[[0, "#F5F7F4"], [.5, "#7FB79A"], [1, GREEN_D]],
+                hovertemplate="%{y} %{x}:00<br>Rp %{z:,.0f}<extra></extra>", showscale=False))
+            fig.update_layout(height=230, margin=dict(t=10, b=34, l=54, r=14))
+            show_chart(fig)
 
-    # === TAB 1: TREND HARIAN ===
-    with tab1:
-        daily = df.groupby("date_only").agg(nett=("nett_sales","sum"), pax=("pax_total","sum")).reset_index()
-        daily.columns = ["Tanggal","Nett Sales","Pax"]
-        fig = make_subplots(specs=[[{"secondary_y":True}]])
-        fig.add_trace(go.Bar(x=daily["Tanggal"], y=daily["Nett Sales"], name="Nett Sales",
-                             marker_color=COLORS["secondary"], opacity=0.85), secondary_y=False)
-        fig.add_trace(go.Scatter(x=daily["Tanggal"], y=daily["Pax"], name="Pax",
-                                 mode="lines+markers", line=dict(color=COLORS["gold"],width=2.5),
-                                 marker=dict(size=5)), secondary_y=True)
-        fig.update_layout(title="Daily sales & pax trend", height=520, hovermode="x unified",
-                          legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1), **PLT)
-        fig.update_yaxes(title_text="Nett Sales (Rp)", secondary_y=False)
-        fig.update_yaxes(title_text="Pax", secondary_y=True)
-        show_chart(fig, use_container_width=True)
-
-        wd_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
-        wd = df.groupby("weekday").agg(avg_s=("nett_sales","mean"), avg_p=("pax_total","mean")).reindex(wd_order).reset_index()
-        c1,c2 = st.columns(2)
-        with c1:
-            fig_w = px.bar(wd, x="weekday", y="avg_s", title="Rata-rata sales per hari",
-                           color="avg_s", color_continuous_scale=["#DCEEE4","#103D28"], **PLT)
-            fig_w.update_layout(height=460, showlegend=False, coloraxis_showscale=False)
-            clean_hover(fig_w, prefix='Rp ')
-            show_chart(fig_w, use_container_width=True)
-        with c2:
-            fig_w2 = px.bar(wd, x="weekday", y="avg_p", title="Rata-rata pax per hari",
-                            color="avg_p", color_continuous_scale=["#FFF3CD","#C08A2C"], **PLT)
-            fig_w2.update_layout(height=460, showlegend=False, coloraxis_showscale=False)
-            clean_hover(fig_w2, suffix=' pax')
-            show_chart(fig_w2, use_container_width=True)
-
-    # === TAB 2: ANALISIS PER JAM (WD vs WE) ===
-    with tab2:
-        c1, c2 = st.columns(2)
-        with c1:
-            traffic = df.groupby("day_type")["pax_total"].sum().reset_index()
-            traffic.columns = ["Day Type", "Pax"]
-            fig_tr = px.bar(traffic, x="Day Type", y="Pax", title="Tenant traffic \u2014 Weekday vs Weekend",
-                            color="Day Type", color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
-                            text="Pax", **PLT)
-            fig_tr.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
-            fig_tr.update_layout(height=460, showlegend=False)
-            clean_hover(fig_tr, suffix=' pax')
-            show_chart(fig_tr, use_container_width=True)
-        with c2:
-            traffic_s = df.groupby("day_type")["nett_sales"].sum().reset_index()
-            traffic_s.columns = ["Day Type", "Sales"]
-            fig_ts = px.bar(traffic_s, x="Day Type", y="Sales", title="Total sales \u2014 Weekday vs Weekend",
-                            color="Day Type", color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
-                            text="Sales", **PLT)
-            fig_ts.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=14)
-            fig_ts.update_layout(height=460, showlegend=False)
-            clean_hover(fig_ts, prefix='Rp ')
-            show_chart(fig_ts, use_container_width=True)
-
-        hr_wd = df.groupby(["hr","day_type"])["pax_total"].sum().reset_index()
-        hr_wd["lbl"] = hr_wd["hr"].apply(lambda x: f"{x:02d}:00")
-        fig_h = px.bar(hr_wd, x="lbl", y="pax_total", color="day_type", barmode="group",
-                       title="Number of transaction per hour \u2014 Weekday vs Weekend",
-                       color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
-                       text="pax_total", labels={"lbl":"Jam","pax_total":"Pax","day_type":""}, **PLT)
-        fig_h.update_traces(textposition="outside", textfont_size=13)
-        fig_h.update_layout(height=550, legend=dict(orientation="h",yanchor="bottom",y=1.02))
-        clean_hover(fig_h, suffix=' pax')
-        show_chart(fig_h, use_container_width=True)
-
-        hm = df.groupby(["weekday","hr"])["nett_sales"].sum().reset_index()
-        hm_piv = hm.pivot(index="weekday", columns="hr", values="nett_sales").fillna(0)
-        hm_piv = hm_piv.reindex(["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"])
-        fig_hm = px.imshow(hm_piv, aspect="auto", title="Heatmap: hari \u00d7 jam",
-                           color_continuous_scale=["#DCEEE4","#103D28"],
-                           labels=dict(x="Jam",y="Hari",color="Sales"), **PLT)
-        fig_hm.update_layout(height=460)
-        show_chart(fig_hm, use_container_width=True)
-
-    # === TAB 3: PERBANDINGAN TENANT ===
-    with tab3:
-        if df["tenant_name"].nunique() > 1:
-            st.markdown(f"""
-            <div style="text-align:center; padding:1rem; background:#F0FFF4; border-radius:10px; margin-bottom:1rem;">
-                <div style="font-size:0.85rem; color:#666; text-transform:uppercase; letter-spacing:1px;">Total Sales All Tenants</div>
-                <div style="font-size:2.2rem; font-weight:800; color:#103D28;">{fmt_rp(t_nett)}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            ta = df.groupby("tenant_name").agg(ts=("nett_sales","sum"), tp=("pax_total","sum")).reset_index().sort_values("ts", ascending=False)
-            c1,c2 = st.columns(2)
-            with c1:
-                fig_t = px.bar(ta, x="tenant_name", y="ts", title="Total sales per tenant",
-                               color="tenant_name", color_discrete_sequence=CHART_PALETTE, text="ts", **PLT)
-                fig_t.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=14)
-                fig_t.update_layout(height=520, showlegend=False)
-                clean_hover(fig_t, prefix='Rp ')
-                show_chart(fig_t, use_container_width=True)
-            with c2:
-                fig_p = px.pie(ta, values="ts", names="tenant_name", title="Kontribusi sales per tenant",
-                               color_discrete_sequence=CHART_PALETTE, hole=0.4, **PLT)
-                fig_p.update_layout(height=520)
-                show_chart(fig_p, use_container_width=True)
-            td = df.groupby(["date_only","tenant_name"])["nett_sales"].sum().reset_index()
-            td.columns = ["Tanggal","Tenant","Nett Sales"]
-            fig_td = px.line(td, x="Tanggal", y="Nett Sales", color="Tenant",
-                             title="Daily trend per tenant", color_discrete_sequence=CHART_PALETTE, **PLT)
-            fig_td.update_layout(height=500)
-            show_chart(fig_td, use_container_width=True)
+    with t[2]:
+        seg = df[df["segment"] != "Other"]
+        if seg.empty:
+            st.info("Tidak ada transaksi pada jam segmen yang ditentukan.")
         else:
-            st.info("\U0001f4ca Perbandingan tenant tersedia setelah ada data dari lebih dari 1 tenant.")
+            agg = seg.groupby("segment").agg(v=("nett_sales", "sum"),
+                                             p=("pax_total", "sum")).reset_index()
+            c = st.columns([1, 2])
+            with c[0]:
+                with card_container():
+                    st.markdown('<div class="chart-title">Kontribusi segmen</div>',
+                                unsafe_allow_html=True)
+                    fig = go.Figure(go.Pie(labels=agg["segment"], values=agg["v"], hole=.62,
+                        marker=dict(colors=[GREEN, OCHRE, "#6B7B3A"], line=dict(color="#fff", width=2)),
+                        textinfo="percent", hovertemplate="%{label}<br>Rp %{value:,.0f}<extra></extra>"))
+                    fig.update_layout(height=250, margin=dict(t=10, b=10, l=10, r=10))
+                    show_chart(fig)
+            with c[1]:
+                agg["per"] = (agg["v"] / agg["p"].replace(0, pd.NA)).fillna(0).round()
+                render_card("Perbandingan segmen",
+                    rows_html([(r["segment"], r["segment"],
+                                f"{r['p']:,.0f} pax · {fmt_rp(r['per'])} per pax".replace(",", "."),
+                                f'<span class="amt num">{fmt_rp(r["v"])}</span>')
+                               for _, r in agg.sort_values("v", ascending=False).iterrows()]),
+                    foot="Breakfast 07–10, Lunch 12–14, After Office 17–19.")
 
-    # === TAB 4: TIME SEGMENT ===
-    with tab4:
-        seg_df = df[df["segment"] != "Other"]
-        seg_order = ["Breakfast","Lunch","After Office"]
-
-        seg_pax = seg_df.groupby(["segment","day_type"])["pax_total"].sum().reset_index()
-        fig_sp = px.bar(seg_pax, x="segment", y="pax_total", color="day_type", barmode="group",
-                        title="Tenant pax by time segment \u2014 Weekday vs Weekend",
-                        color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
-                        text="pax_total", category_orders={"segment": seg_order},
-                        labels={"segment":"Segment","pax_total":"Pax","day_type":""}, **PLT)
-        fig_sp.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
-        fig_sp.update_layout(height=520, legend=dict(orientation="h",yanchor="bottom",y=1.02))
-        clean_hover(fig_sp, suffix=' pax')
-        show_chart(fig_sp, use_container_width=True)
-
-        st.divider()
-
+    with t[3]: sec_weekly(df, cfg)
+    with t[4]: sec_monthly(df, cfg)
+    with t[5]:
+        sec_deep(df, cfg)
         if df["tenant_name"].nunique() > 1:
-            weeks_available = sorted(df["week_label"].unique())
-            sel_weeks = st.multiselect("Pilih minggu untuk perbandingan:", weeks_available,
-                                       default=weeks_available[-2:] if len(weeks_available) >= 2 else weeks_available)
-            for seg_name in seg_order:
-                st.markdown(f"### {seg_name} ({TIME_SEGMENTS[seg_name][0]:02d}:00 - {TIME_SEGMENTS[seg_name][1]-1:02d}:59)")
-                seg_filtered = seg_df[(seg_df["segment"] == seg_name) & (seg_df["week_label"].isin(sel_weeks))]
+            per_t = (df.groupby(["tenant_id", "tenant_name"])
+                       .agg(v=("nett_sales", "sum"), p=("pax_total", "sum")).reset_index()
+                       .sort_values("v", ascending=False))
+            render_card("Perbandingan tenant",
+                rows_html([(r["tenant_id"], r["tenant_name"],
+                            f"{r['p']:,.0f} pax".replace(",", "."),
+                            f'<span class="amt num">{fmt_rp(r["v"])}</span>')
+                           for _, r in per_t.iterrows()]))
 
-                pax_agg = seg_filtered.groupby(["tenant_name","week_label"])["pax_total"].sum().reset_index()
-                fig_px2 = px.bar(pax_agg, x="tenant_name", y="pax_total", color="week_label",
-                                barmode="group", title=f"{seg_name} — Pax per Tenant",
-                                text="pax_total", color_discrete_sequence=CHART_PALETTE,
-                                labels={"tenant_name":"Tenant","pax_total":"Pax","week_label":""}, **PLT)
-                fig_px2.update_traces(textposition="outside", textfont_size=14)
-                fig_px2.update_layout(height=460, legend=dict(orientation="h",yanchor="bottom",y=1.02))
-                clean_hover(fig_px2, suffix=' pax')
-                show_chart(fig_px2, use_container_width=True)
-
-                sales_agg = seg_filtered.groupby(["tenant_name","week_label"])["nett_sales"].sum().reset_index()
-                fig_sx = px.bar(sales_agg, x="tenant_name", y="nett_sales", color="week_label",
-                                barmode="group", title=f"{seg_name} — Sales per Tenant",
-                                text="nett_sales", color_discrete_sequence=CHART_PALETTE,
-                                labels={"tenant_name":"Tenant","nett_sales":"Sales (Rp)","week_label":""}, **PLT)
-                fig_sx.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=14)
-                fig_sx.update_layout(height=460, legend=dict(orientation="h",yanchor="bottom",y=1.02))
-                clean_hover(fig_sx, prefix='Rp ')
-                show_chart(fig_sx, use_container_width=True)
-
-                st.markdown("---")
-        else:
-            st.info("Perbandingan per tenant tersedia setelah ada data lebih dari 1 tenant.")
-
-    # === TAB 5: WEEKLY REPORT ===
-    with tab5:
-        if df["tenant_name"].nunique() >= 1:
-            weekly_sales = df.groupby(["tenant_name","week_label"])["nett_sales"].sum().reset_index()
-            fig_ws = px.bar(weekly_sales, x="tenant_name", y="nett_sales", color="week_label",
-                            barmode="group", title="Tenant sales per week",
-                            text="nett_sales", color_discrete_sequence=["#8A3730","#CC3333","#DAA520","#B8860B"],
-                            labels={"tenant_name":"Tenant","nett_sales":"Sales","week_label":""}, **PLT)
-            fig_ws.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
-            fig_ws.update_layout(height=580, legend=dict(orientation="h",yanchor="bottom",y=1.02))
-            clean_hover(fig_ws, prefix='Rp ')
-            show_chart(fig_ws, use_container_width=True)
-
-        st.divider()
-        st.subheader("\U0001f4cb Detail Week Sales per Tenant")
-        week_opts = sorted(df["week_label"].unique())
-        sel_week = st.selectbox("Pilih Minggu:", week_opts, index=len(week_opts)-1 if week_opts else 0, key="detail_week_sel")
-        wdf = df[df["week_label"] == sel_week]
-
-        day_order_id = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
-        day_labels = {"Monday":"Senin","Tuesday":"Selasa","Wednesday":"Rabu","Thursday":"Kamis",
-                      "Friday":"Jumat","Saturday":"Sabtu","Sunday":"Minggu"}
-
-        tenants_in_week = wdf["tenant_name"].unique()
-        cols_per_row = min(len(tenants_in_week), 3) if len(tenants_in_week) > 0 else 1
-        rows_needed = (len(tenants_in_week) + cols_per_row - 1) // cols_per_row
-
-        idx = 0
-        for row_i in range(rows_needed):
-            cols = st.columns(cols_per_row)
-            for col_i in range(cols_per_row):
-                if idx >= len(tenants_in_week):
-                    break
-                tn = tenants_in_week[idx]
-                tdf2 = wdf[wdf["tenant_name"] == tn]
-                day_sales = tdf2.groupby("weekday")["nett_sales"].sum().reindex(day_order_id).fillna(0)
-                avg_val = day_sales.mean()
-                with cols[col_i]:
-                    day_chart = pd.DataFrame({"Hari": [day_labels.get(d, d) for d in day_order_id], "Sales": day_sales.values})
-                    fig_d = px.bar(day_chart, x="Hari", y="Sales", title=f"{tn} ({sel_week})",
-                                   text="Sales", color_discrete_sequence=["#6495ED"], **PLT)
-                    fig_d.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
-                    fig_d.update_layout(height=520, showlegend=False, margin=dict(t=40,b=10))
-                    clean_hover(fig_d, prefix='Rp ')
-                    show_chart(fig_d, use_container_width=True)
-                    st.markdown(f"""
-                    <div style="text-align:center; padding:0.5rem; background:#F5F5DC; border-radius:8px; margin-top:-0.5rem;">
-                        <div style="font-size:0.7rem; color:#666;">AVERAGE SALES</div>
-                        <div style="font-size:1.1rem; font-weight:700; color:#103D28;">{fmt_rp(avg_val)}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                idx += 1
-
-    # === TAB 6: MONTHLY OVERVIEW ===
-    with tab6:
-        monthly = df.groupby("month").agg(trx=("pax_total","sum"), sales=("nett_sales","sum")).reset_index().sort_values("month")
-        fig_mt = px.bar(monthly, x="trx", y="month", orientation="h", title="Number of transaction per month",
-                        text="trx", color_discrete_sequence=["#8A3730"], **PLT)
-        fig_mt.update_traces(textposition="outside", texttemplate="%{text:,}", textfont_size=14)
-        fig_mt.update_layout(height=max(400, len(monthly)*80), yaxis=dict(autorange="reversed"),
-                             xaxis_title="Transactions", yaxis_title="")
-        clean_hover(fig_mt, suffix=' pax')
-        show_chart(fig_mt, use_container_width=True)
-
-        if df["tenant_name"].nunique() > 1:
-            mt_tenant = df.groupby(["month","tenant_name"])["nett_sales"].sum().reset_index()
-            fig_mtt = px.bar(mt_tenant, x="tenant_name", y="nett_sales", color="month", barmode="group",
-                             title="Tenant sales per month", text="nett_sales", color_discrete_sequence=CHART_PALETTE, **PLT)
-            fig_mtt.update_traces(textposition="outside", texttemplate="Rp%{text:,.0f}", textfont_size=13)
-            fig_mtt.update_layout(height=550, legend=dict(orientation="h",yanchor="bottom",y=1.02))
-            clean_hover(fig_mtt, prefix='Rp ')
-            show_chart(fig_mtt, use_container_width=True)
-
-        for _, row in monthly.iterrows():
-            st.markdown(f"""
-            <div style="display:inline-block; text-align:center; padding:0.8rem 1.5rem;
-                 background:#F0FFF4; border-radius:10px; margin:0.3rem; border:1px solid #DCEEE4;">
-                <div style="font-size:0.75rem; color:#666; text-transform:uppercase;">Total Sales {row['month']}</div>
-                <div style="font-size:1.3rem; font-weight:800; color:#103D28;">{fmt_rp(row['sales'])}</div>
-                <div style="font-size:0.75rem; color:#888;">{row['trx']:,} pax</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    # === TAB 7: DEEP DIVE ===
-    with tab7:
-        c1,c2 = st.columns(2)
-        with c1:
-            dma = df.groupby("date_only")["nett_sales"].sum().reset_index()
-            dma.columns = ["Tanggal","Sales"]
-            dma["MA_7"] = dma["Sales"].rolling(7, min_periods=1).mean()
-            dma["MA_14"] = dma["Sales"].rolling(14, min_periods=1).mean()
-            fig_ma = go.Figure()
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"], y=dma["Sales"], name="Daily",
-                                        mode="lines", line=dict(color="#DCEEE4",width=1)))
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"], y=dma["MA_7"], name="MA 7-day",
-                                        mode="lines", line=dict(color=COLORS["accent"],width=2.5)))
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"], y=dma["MA_14"], name="MA 14-day",
-                                        mode="lines", line=dict(color=COLORS["primary"],width=2.5)))
-            fig_ma.update_layout(title="Moving average analysis", height=500, **PLT)
-            show_chart(fig_ma, use_container_width=True)
-        with c2:
-            dd = df.groupby("date_only").agg(disc=("discount_total","sum"), sales=("nett_sales","sum"), pax=("pax_total","sum")).reset_index()
-            dd.columns = ["Tanggal","Discount","Sales","Pax"]
-            fig_sc = px.scatter(dd, x="Discount", y="Sales", size="Pax", title="Discount vs sales impact",
-                                color="Pax", color_continuous_scale=["#DCEEE4","#103D28"], **PLT)
-            fig_sc.update_layout(height=500)
-            show_chart(fig_sc, use_container_width=True)
-
-        st.subheader("\U0001f4cb Tabel ringkasan statistik")
-        sdf = df.groupby("tenant_name").agg(
-            days=("date_only", "nunique"), pax=("pax_total","sum"), sub=("subtotal","sum"),
-            disc=("discount_total","sum"), nett=("nett_sales","sum")).reset_index()
-        sdf["avg_pax"] = (sdf["nett"]/sdf["pax"]).round(0)
-        sdf["disc_rate"] = (sdf["disc"]/sdf["sub"]*100).round(1)
-        sdf["avg_daily"] = (sdf["nett"]/sdf["days"]).round(0)
-        sdf.columns = ["Tenant","Hari Aktif","Total Pax","Subtotal (Rp)","Discount (Rp)",
-                        "Nett Sales (Rp)","Avg/Pax (Rp)","Discount Rate (%)","Avg Daily (Rp)"]
-        st.dataframe(sdf, use_container_width=True, hide_index=True)
-
-        st.divider()
-        st.markdown("**\U0001f4e5 Export Dashboard Report**")
-        ec1, ec2, ec3, ec4 = st.columns(4)
-        with ec1:
-            html_bytes = generate_dashboard_html(df, sel_tenant, date_range[0] if isinstance(date_range, tuple) else date.today(), date_range[1] if isinstance(date_range, tuple) else date.today())
-            fname_tenant = sel_tenant.replace(" ","_") if sel_tenant != "All" else "All_Tenants"
-            fname_html = f"GROVE_Report_{fname_tenant}_{date.today().strftime('%Y%m%d')}.html"
-            st.download_button("\U0001f5a8\ufe0f Print / Save as PDF", html_bytes, fname_html, "text/html", use_container_width=True)
-        with ec2:
-            xlsx_bytes = generate_dashboard_xlsx(df, sel_tenant, date_range[0] if isinstance(date_range, tuple) else date.today(), date_range[1] if isinstance(date_range, tuple) else date.today())
-            fname = f"GROVE_Dashboard_{fname_tenant}_{date.today().strftime('%Y%m%d')}.xlsx"
-            st.download_button("\U0001f4ca Download Dashboard (XLSX)", xlsx_bytes, fname,
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                               use_container_width=True)
-        with ec3:
-            csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button("\u2b07\ufe0f Download Raw Data (CSV)", csv, "grove_raw_data.csv", "text/csv", use_container_width=True)
-        with ec4:
-            csv2 = sdf.to_csv(index=False).encode("utf-8")
-            st.download_button("\u2b07\ufe0f Download Summary (CSV)", csv2, "grove_summary.csv", "text/csv", use_container_width=True)
+    _export_row(df, sel_tenant, dr, kind="fnb")
 
 
-# ============================================================================
-# UPLOAD PAGE
-# ============================================================================
 def page_upload_esb():
     render_header()
     db = get_db()
@@ -3305,269 +3223,163 @@ def page_upload_playground():
 # ============================================================================
 # DASHBOARD PLAYGROUND
 # ============================================================================
+def _export_row(df, label, dr, kind="fnb"):
+    """The four export buttons, identical on both dashboards."""
+    s, e = (dr[0], dr[1]) if isinstance(dr, tuple) else (date.today(), date.today())
+    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+    with card_container():
+        st.markdown('<div class="chart-title">Ekspor</div>', unsafe_allow_html=True)
+        c = st.columns(4)
+        if kind == "fnb":
+            with c[0]:
+                st.download_button("🖨️ Print / PDF", generate_dashboard_html(df, label, s, e),
+                                   f"grove_fnb_{s}_{e}.html", "text/html", use_container_width=True)
+            with c[1]:
+                st.download_button("📊 XLSX", generate_dashboard_xlsx(df, label, s, e),
+                                   f"grove_fnb_{s}_{e}.xlsx",
+                                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   use_container_width=True)
+        else:
+            with c[0]:
+                st.download_button("🖨️ Print / PDF", generate_playground_html(df.copy(), s, e),
+                                   f"grove_playground_{s}_{e}.html", "text/html",
+                                   use_container_width=True)
+            with c[1]:
+                st.download_button("📊 XLSX", generate_playground_xlsx(df.copy(), s, e),
+                                   f"grove_playground_{s}_{e}.xlsx",
+                                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   use_container_width=True)
+        with c[2]:
+            st.download_button("⬇️ Data mentah (CSV)", df.to_csv(index=False).encode(),
+                               f"grove_{kind}_raw.csv", "text/csv", use_container_width=True)
+        with c[3]:
+            g = df.groupby(df["sales_date"].dt.date)["nett_sales"].sum().reset_index()
+            st.download_button("⬇️ Ringkasan (CSV)", g.to_csv(index=False).encode(),
+                               f"grove_{kind}_summary.csv", "text/csv", use_container_width=True)
+
+
 def page_dashboard_playground():
     render_header()
-    render_page_head("Dashboard Playground", "Twist N' Turns · analisis transaksi harian")
     db = get_db()
+    df_all = db.get_playground_data()
 
-    df = db.get_playground_data()
+    hc = st.columns([3, 1])
+    if df_all.empty:
+        with hc[0]:
+            render_page_head("Dashboard Playground", "Belum ada data")
+        render_card("Belum ada data",
+                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file CSV '
+                    'melalui menu Upload Playground.</p>')
+        return
+    # Children and companions are the two things being counted; visitors is the
+    # sum, which is what makes Playground comparable with an F&B pax count.
+    df_all = df_all.assign(visitors=df_all["child_total"] + df_all["companion_total"])
+    with hc[1]:
+        df, dr = _filters(df_all, "pg_dr")
+    with hc[0]:
+        render_page_head("Dashboard Playground",
+                         f"Twist N' Turns · {dr[0]:%d %b %Y} – {dr[1]:%d %b %Y}")
     if df.empty:
-        st.info("📭 Belum ada data Playground. Upload file CSV melalui menu **Upload Playground**.")
+        render_card("Tidak ada data",
+                    '<p style="font-size:12.5px;color:#8B948D;margin:0">Rentang tanggal '
+                    'yang dipilih tidak memuat transaksi.</p>')
         return
 
-    # Same reasoning as the F&B dashboard: bound the picker to the data so the
-    # page never opens empty just because the latest upload predates today.
-    dmin, dmax = df["sales_date"].min().date(), df["sales_date"].max().date()
-    cf1, cf2 = st.columns([2, 1])
-    with cf1:
-        dr = st.date_input("📅 Rentang Tanggal",
-                           value=(max(dmin, dmax - timedelta(days=30)), dmax),
-                           min_value=dmin, max_value=dmax, key="pg_dr")
-    with cf2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("🔄 Refresh", use_container_width=True, key="pg_ref")
+    cfg = dict(val="nett_sales", cnt="visitors", cnt_label="Pengunjung",
+               per_label="per pengunjung")
+    nett = df["nett_sales"].sum()
+    trx, child, comp = len(df), df["child_total"].sum(), df["companion_total"].sum()
+    ndays = df["sales_date"].dt.date.nunique()
 
-    if isinstance(dr, tuple) and len(dr) == 2:
-        df = df[(df["sales_date"] >= pd.Timestamp(dr[0])) & (df["sales_date"] <= pd.Timestamp(dr[1]))]
-    if df.empty:
-        st.warning("Tidak ada data pada rentang tanggal yang dipilih.")
-        return
+    k = st.columns(4)
+    with k[0]: render_kpi("Nett Sales", fmt_rp(nett), featured=True,
+                          caption=f"{ndays} hari beroperasi")
+    with k[1]: render_kpi("Transaksi", f"{trx:,.0f}".replace(",", "."),
+                          caption=f"{trx/ndays:,.1f} per hari".replace(",", ".") if ndays else None)
+    with k[2]: render_kpi("Anak", f"{child:,.0f}".replace(",", "."),
+                          caption=f"{child/trx:.2f} per transaksi" if trx else None)
+    with k[3]: render_kpi("Rata per Transaksi", fmt_rp(nett / trx if trx else 0),
+                          caption="nett dibagi jumlah transaksi")
 
-    df["date_only"] = df["sales_date"].dt.date
-    df["weekday"] = df["sales_date"].dt.day_name()
-    df["is_weekend"] = df["sales_date"].apply(lambda d: d.weekday() >= 5)
-    df["day_type"] = df["is_weekend"].map({True:"Weekend",False:"Weekday"})
-    df["week_num"] = df["sales_date"].apply(lambda d: (d.day-1)//7+1)
-    df["week_label"] = "Week " + df["week_num"].astype(str)
-    df["month"] = df["sales_date"].dt.to_period("M").astype(str)
-    df["visitor"] = df["child_total"] + df["companion_total"]
+    t = st.tabs(["Trend Harian", "Child & Companion", "Weekend vs Weekday",
+                 "Weekly Report", "Monthly Overview", "Deep Dive"])
 
-    # KPIs
-    t_amount = df["amount"].sum(); t_nett = df["nett_sales"].sum()
-    t_tax = df["tax_amount"].sum(); t_child = df["child_total"].sum()
-    t_comp = df["companion_total"].sum(); t_trx = len(df)
-    n_days = df["date_only"].nunique()
-    avg_trx = t_amount / t_trx if t_trx else 0
-    avg_daily = t_amount / n_days if n_days else 0
-    avg_child_spend = t_amount / t_child if t_child else 0
+    with t[0]:
+        sec_trend(df, cfg)
 
-    k1,k2,k3,k4,k5,k6 = st.columns(6)
-    with k1: render_kpi("Total Revenue", fmt_rp(t_amount))
-    with k2: render_kpi("Transaksi", f"{t_trx:,}", variant="gold")
-    with k3: render_kpi("Total Anak", f"{t_child:,}", variant="blue")
-    with k4: render_kpi("Total Pendamping", f"{t_comp:,}", variant="orange")
-    with k5: render_kpi("Avg / Transaksi", fmt_rp(avg_trx), variant="red")
-    with k6: render_kpi("Avg / Anak", fmt_rp(avg_child_spend))
+    with t[1]:
+        daily = (df.groupby(df["sales_date"].dt.date)
+                   .agg(anak=("child_total", "sum"), pendamping=("companion_total", "sum"))
+                   .reset_index())
+        daily.columns = ["day", "anak", "pendamping"]
+        c = st.columns([2, 1])
+        with c[0]:
+            with card_container():
+                st.markdown('<div class="chart-title">Anak dan pendamping per hari</div>',
+                            unsafe_allow_html=True)
+                fig = go.Figure()
+                fig.add_bar(x=daily["day"], y=daily["anak"], name="Anak",
+                            marker_color=GREEN,
+                            hovertemplate="%{x|%d %b}<br>%{y:,.0f} anak<extra></extra>")
+                fig.add_bar(x=daily["day"], y=daily["pendamping"], name="Pendamping",
+                            marker_color=OCHRE,
+                            hovertemplate="%{x|%d %b}<br>%{y:,.0f} pendamping<extra></extra>")
+                fig.update_layout(barmode="stack", height=250,
+                                  margin=dict(t=10, b=34, l=54, r=14))
+                show_chart(fig)
+        with c[1]:
+            ratio = comp / child if child else 0
+            solo = int((df["companion_total"] == 0).sum())
+            render_card("Komposisi kunjungan",
+                f'<div class="rows">'
+                f'<div class="row"><div><b>Rasio pendamping</b>'
+                f'<small>pendamping per satu anak</small></div>'
+                f'<span class="amt num">{ratio:.2f}</span></div>'
+                f'<div class="row"><div><b>Total pendamping</b>'
+                f'<small>{comp/trx:.2f} per transaksi</small></div>'
+                f'<span class="amt num">{comp:,.0f}</span></div>'
+                f'<div class="row"><div><b>Tanpa pendamping</b>'
+                f'<small>{solo/trx*100:.1f}% dari transaksi</small></div>'
+                f'<span class="amt num">{solo:,.0f}</span></div>'
+                f'</div>'.replace(",", "."),
+                foot="Rasio di bawah 1 berarti sebagian anak datang tanpa pendamping berbayar.")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    with t[2]:
+        we = df.assign(we=df["sales_date"].dt.dayofweek >= 5)
+        agg = we.groupby("we").agg(v=("nett_sales", "sum"), t=("order_id", "count"),
+                                   a=("child_total", "sum"),
+                                   d=("sales_date", lambda s: s.dt.date.nunique())).reset_index()
+        agg["label"] = agg["we"].map({False: "Hari kerja", True: "Akhir pekan"})
+        agg["per_day"] = agg["v"] / agg["d"].replace(0, pd.NA)
+        c = st.columns([1, 2])
+        with c[0]:
+            with card_container():
+                st.markdown('<div class="chart-title">Rata-rata per hari</div>',
+                            unsafe_allow_html=True)
+                fig = go.Figure(go.Bar(
+                    x=agg["label"], y=agg["per_day"],
+                    marker=dict(color=[GREEN, OCHRE][:len(agg)]),
+                    hovertemplate="%{x}<br>Rp %{y:,.0f} per hari<extra></extra>"))
+                fig.update_layout(height=240, showlegend=False, bargap=.45,
+                                  yaxis=dict(visible=False), margin=dict(t=10, b=34, l=10, r=10))
+                show_chart(fig)
+        with c[1]:
+            render_card("Hari kerja dibanding akhir pekan",
+                rows_html([(r["label"], r["label"],
+                            f"{r['d']} hari · {r['t']:,.0f} transaksi · {r['a']:,.0f} anak"
+                            .replace(",", "."),
+                            f'<span class="amt num">{fmt_rp(r["per_day"])} / hari</span>')
+                           for _, r in agg.iterrows()]),
+                foot="Dibandingkan sebagai rata-rata harian, karena akhir pekan hanya "
+                     "dua dari tujuh hari — total mentahnya akan selalu kalah.")
 
-    tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs([
-        "📈 Trend Harian","👶 Child & Companion","🏢 Weekday vs Weekend",
-        "📅 Weekly Report","📆 Monthly Overview","📊 Deep Dive"
-    ])
+    with t[3]: sec_weekly(df, cfg)
+    with t[4]: sec_monthly(df, cfg)
+    with t[5]: sec_deep(df, cfg)
 
-    PG_PALETTE = ["#1A6B3F","#2E9160","#C08A2C","#3B4C7A","#9E6B4A","#C0483C"]
-
-    # TAB 1: TREND HARIAN
-    with tab1:
-        daily = df.groupby("date_only").agg(amount=("amount","sum"),trx=("amount","count"),
-            child=("child_total","sum"),comp=("companion_total","sum")).reset_index()
-        fig = make_subplots(specs=[[{"secondary_y":True}]])
-        fig.add_trace(go.Bar(x=daily["date_only"].astype(str),y=daily["amount"],name="Revenue",
-                             marker_color="#1A6B3F",opacity=0.85),secondary_y=False)
-        fig.add_trace(go.Scatter(x=daily["date_only"].astype(str),y=daily["trx"],name="Transaksi",
-                                 mode="lines+markers",line=dict(color="#C08A2C",width=2.5)),secondary_y=True)
-        fig.update_layout(title="Daily Revenue & Transaction Trend",height=520,hovermode="x unified",**PLT)
-        fig.update_yaxes(title_text="Revenue (Rp)",secondary_y=False)
-        fig.update_yaxes(title_text="Transaksi",secondary_y=True)
-        clean_hover(fig, prefix="Rp ")
-        show_chart(fig, use_container_width=True)
-
-        wd_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
-        wd = df.groupby("weekday")["amount"].mean().reindex(wd_order).fillna(0).reset_index()
-        wd.columns = ["Day","Avg"]
-        fig_wd = px.bar(wd,x="Day",y="Avg",title="Rata-rata Revenue per Hari",
-                        color="Avg",color_continuous_scale=["#DCEEE4","#1A6B3F"],**PLT)
-        fig_wd.update_layout(height=460,showlegend=False,coloraxis_showscale=False)
-        clean_hover(fig_wd, prefix="Rp ")
-        show_chart(fig_wd, use_container_width=True)
-
-    # TAB 2: CHILD & COMPANION
-    with tab2:
-        c1,c2 = st.columns(2)
-        with c1:
-            visitor_data = pd.DataFrame({"Tipe":["Anak","Pendamping"],"Jumlah":[t_child,t_comp]})
-            fig_vc = px.pie(visitor_data,values="Jumlah",names="Tipe",title="Komposisi Pengunjung",
-                            color_discrete_sequence=["#1A6B3F","#C08A2C"],hole=0.4,**PLT)
-            fig_vc.update_layout(height=460)
-            show_chart(fig_vc, use_container_width=True)
-        with c2:
-            daily_v = df.groupby("date_only").agg(child=("child_total","sum"),comp=("companion_total","sum")).reset_index()
-            fig_v = go.Figure()
-            fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["child"],name="Anak",marker_color="#1A6B3F"))
-            fig_v.add_trace(go.Bar(x=daily_v["date_only"].astype(str),y=daily_v["comp"],name="Pendamping",marker_color="#C08A2C"))
-            fig_v.update_layout(title="Daily Child vs Companion",barmode="stack",height=460,**PLT)
-            show_chart(fig_v, use_container_width=True)
-
-        # Avg child per transaction distribution
-        fig_dist = px.histogram(df,x="child_total",title="Distribusi Jumlah Anak per Transaksi",
-                                nbins=int(max(df["child_total"].max(),10)),color_discrete_sequence=["#1A6B3F"],
-                                labels={"child_total":"Jumlah Anak","count":"Frekuensi"},**PLT)
-        fig_dist.update_layout(height=460)
-        show_chart(fig_dist, use_container_width=True)
-
-        # Customer frequency
-        st.subheader("🔄 Top Repeat Customers")
-        freq = df.groupby("customer_name").agg(visits=("order_id","count"),
-            total_spend=("amount","sum"),total_child=("child_total","sum")).reset_index()
-        freq = freq.sort_values("visits",ascending=False).head(20)
-        freq.columns = ["Nama","Kunjungan","Total Spend (Rp)","Total Anak"]
-        st.dataframe(freq, use_container_width=True, hide_index=True)
-
-    # TAB 3: WEEKDAY VS WEEKEND
-    with tab3:
-        c1,c2 = st.columns(2)
-        with c1:
-            trf = df.groupby("day_type").agg(revenue=("amount","sum"),trx=("amount","count")).reset_index()
-            fig_tr = px.bar(trf,x="day_type",y="revenue",title="Revenue — Weekday vs Weekend",
-                            color="day_type",color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
-                            text="revenue",**PLT)
-            fig_tr.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=14)
-            fig_tr.update_layout(height=460,showlegend=False)
-            show_chart(fig_tr, use_container_width=True)
-        with c2:
-            trf_c = df.groupby("day_type")["child_total"].sum().reset_index()
-            fig_tc = px.bar(trf_c,x="day_type",y="child_total",title="Total Anak — Weekday vs Weekend",
-                            color="day_type",color_discrete_map={"Weekday":"#3B4C7A","Weekend":"#C0483C"},
-                            text="child_total",**PLT)
-            fig_tc.update_traces(textposition="outside",texttemplate="%{text:,}",textfont_size=14)
-            fig_tc.update_layout(height=460,showlegend=False)
-            show_chart(fig_tc, use_container_width=True)
-
-        # Heatmap weekday
-        daily_wd = df.groupby(["weekday","date_only"]).agg(rev=("amount","sum")).reset_index()
-        wd_avg2 = daily_wd.groupby("weekday")["rev"].mean().reindex(wd_order).fillna(0)
-        wd_child = df.groupby("weekday")["child_total"].mean().reindex(wd_order).fillna(0)
-        combo = pd.DataFrame({"Hari":wd_order,"Avg Revenue":wd_avg2.values,"Avg Anak":wd_child.values})
-        fig_cb = make_subplots(specs=[[{"secondary_y":True}]])
-        fig_cb.add_trace(go.Bar(x=combo["Hari"],y=combo["Avg Revenue"],name="Avg Revenue",marker_color="#1A6B3F"),secondary_y=False)
-        fig_cb.add_trace(go.Scatter(x=combo["Hari"],y=combo["Avg Anak"],name="Avg Anak",
-                                    mode="lines+markers",line=dict(color="#C08A2C",width=2.5)),secondary_y=True)
-        fig_cb.update_layout(title="Avg Revenue & Anak per Hari",height=460,**PLT)
-        show_chart(fig_cb, use_container_width=True)
-
-    # TAB 4: WEEKLY REPORT
-    with tab4:
-        wk = df.groupby("week_label").agg(revenue=("amount","sum"),trx=("amount","count"),
-            child=("child_total","sum")).reset_index()
-        fig_wk = px.bar(wk,x="week_label",y="revenue",title="Revenue per Week",
-                        text="revenue",color_discrete_sequence=["#1A6B3F"],**PLT)
-        fig_wk.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
-        fig_wk.update_layout(height=520)
-        clean_hover(fig_wk, prefix="Rp ")
-        show_chart(fig_wk, use_container_width=True)
-
-        # Weekly detail Senin-Minggu
-        st.subheader("📋 Detail Harian per Minggu")
-        week_opts = sorted(df["week_label"].unique())
-        sel_wk = st.selectbox("Pilih Minggu:",week_opts,index=len(week_opts)-1 if week_opts else 0,key="pg_wk")
-        wdf = df[df["week_label"]==sel_wk]
-        day_labels = {"Monday":"Senin","Tuesday":"Selasa","Wednesday":"Rabu","Thursday":"Kamis",
-                      "Friday":"Jumat","Saturday":"Sabtu","Sunday":"Minggu"}
-        day_sales = wdf.groupby("weekday")["amount"].sum().reindex(wd_order).fillna(0)
-        avg_val = day_sales.mean()
-        dc = pd.DataFrame({"Hari":[day_labels.get(d,d) for d in wd_order],"Revenue":day_sales.values})
-        fig_dd = px.bar(dc,x="Hari",y="Revenue",title=f"Playground TnT — {sel_wk} (Avg: Rp {avg_val:,.0f})",
-                        text="Revenue",color_discrete_sequence=["#2E9160"],**PLT)
-        fig_dd.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
-        fig_dd.update_layout(height=460)
-        show_chart(fig_dd, use_container_width=True)
-
-    # TAB 5: MONTHLY OVERVIEW
-    with tab5:
-        mt = df.groupby("month").agg(revenue=("amount","sum"),trx=("amount","count"),
-            child=("child_total","sum"),comp=("companion_total","sum")).reset_index().sort_values("month")
-        c1,c2 = st.columns(2)
-        with c1:
-            fig_mr = px.bar(mt,x="month",y="revenue",title="Revenue per Bulan",text="revenue",
-                            color_discrete_sequence=["#1A6B3F"],**PLT)
-            fig_mr.update_traces(textposition="outside",texttemplate="Rp%{text:,.0f}",textfont_size=13)
-            fig_mr.update_layout(height=460)
-            show_chart(fig_mr, use_container_width=True)
-        with c2:
-            fig_mc = px.bar(mt,x="month",y="child",title="Total Anak per Bulan",text="child",
-                            color_discrete_sequence=["#C08A2C"],**PLT)
-            fig_mc.update_traces(textposition="outside",texttemplate="%{text:,}",textfont_size=13)
-            fig_mc.update_layout(height=460)
-            show_chart(fig_mc, use_container_width=True)
-
-        for _,row in mt.iterrows():
-            st.markdown(f"""
-            <div style="display:inline-block;text-align:center;padding:0.8rem 1.5rem;
-                 background:#F3ECFA;border-radius:10px;margin:0.3rem;border:1px solid #DCEEE4;">
-                <div style="font-size:0.75rem;color:#666;text-transform:uppercase;">Total {row['month']}</div>
-                <div style="font-size:1.3rem;font-weight:800;color:#1A6B3F;">{fmt_rp(row['revenue'])}</div>
-                <div style="font-size:0.75rem;color:#888;">{row['child']:,} anak · {row['trx']:,} transaksi</div>
-            </div>
-            """,unsafe_allow_html=True)
-
-    # TAB 6: DEEP DIVE
-    with tab6:
-        c1,c2 = st.columns(2)
-        with c1:
-            dma = df.groupby("date_only")["amount"].sum().reset_index()
-            dma.columns = ["Tanggal","Revenue"]; dma = dma.sort_values("Tanggal")
-            dma["MA_7"] = dma["Revenue"].rolling(7,min_periods=1).mean()
-            dma["MA_14"] = dma["Revenue"].rolling(14,min_periods=1).mean()
-            fig_ma = go.Figure()
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["Revenue"],name="Daily",mode="lines",line=dict(color="#DCEEE4",width=1)))
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_7"],name="MA 7-day",mode="lines",line=dict(color="#2E9160",width=2.5)))
-            fig_ma.add_trace(go.Scatter(x=dma["Tanggal"].astype(str),y=dma["MA_14"],name="MA 14-day",mode="lines",line=dict(color="#1A6B3F",width=2.5)))
-            fig_ma.update_layout(title="Moving Average Analysis",height=500,**PLT)
-            show_chart(fig_ma, use_container_width=True)
-        with c2:
-            fig_sc = px.scatter(df,x="child_total",y="amount",size="companion_total",
-                                title="Children vs Revenue per Transaction",
-                                color="companion_total",color_continuous_scale=["#DCEEE4","#1A6B3F"],
-                                labels={"child_total":"Jumlah Anak","amount":"Revenue (Rp)","companion_total":"Pendamping"},**PLT)
-            fig_sc.update_layout(height=500)
-            show_chart(fig_sc, use_container_width=True)
-
-        st.subheader("📋 Ringkasan Statistik")
-        stats_data = {
-            "Metrik": ["Total Revenue","Total Nett Sales","Total Tax","Total Transaksi",
-                       "Total Anak","Total Pendamping","Avg Revenue/Transaksi","Avg Revenue/Anak",
-                       "Avg Anak/Transaksi","Hari Aktif","Avg Daily Revenue"],
-            "Nilai": [f"Rp {t_amount:,.0f}",f"Rp {t_nett:,.0f}",f"Rp {t_tax:,.0f}",f"{t_trx:,}",
-                      f"{t_child:,}",f"{t_comp:,}",f"Rp {avg_trx:,.0f}",f"Rp {avg_child_spend:,.0f}",
-                      f"{t_child/t_trx:.1f}" if t_trx else "0",f"{n_days}",f"Rp {avg_daily:,.0f}"]
-        }
-        st.dataframe(pd.DataFrame(stats_data), use_container_width=True, hide_index=True)
-
-        st.divider()
-        st.markdown("**📥 Export Playground Report**")
-        pe1,pe2,pe3,pe4 = st.columns(4)
-        with pe1:
-            pg_html = generate_playground_html(df.copy(), dr[0] if isinstance(dr,tuple) else date.today(), dr[1] if isinstance(dr,tuple) else date.today())
-            st.download_button("\U0001f5a8\ufe0f Print / Save as PDF", pg_html,
-                               f"GROVE_Playground_{date.today().strftime('%Y%m%d')}.html","text/html",use_container_width=True)
-        with pe2:
-            pg_xlsx = generate_playground_xlsx(df.copy(), dr[0] if isinstance(dr,tuple) else date.today(), dr[1] if isinstance(dr,tuple) else date.today())
-            st.download_button("\U0001f4ca Download Dashboard (XLSX)", pg_xlsx,
-                               f"GROVE_Playground_{date.today().strftime('%Y%m%d')}.xlsx",
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
-        with pe3:
-            csv_pg = df.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Download Raw Data (CSV)",csv_pg,"grove_playground_data.csv","text/csv",use_container_width=True)
-        with pe4:
-            stats_pg = pd.DataFrame(stats_data)
-            csv_sum = stats_pg.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Download Summary (CSV)",csv_sum,"grove_playground_summary.csv","text/csv",use_container_width=True)
+    _export_row(df, "Playground", dr, kind="pg")
 
 
-# ============================================================================
-# MASTER DASHBOARD
-# ============================================================================
 def page_master_dashboard():
     render_header()
     render_page_head("Master Dashboard", "Konsolidasi seluruh tenant F&B dan Playground")
