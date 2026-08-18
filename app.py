@@ -491,107 +491,244 @@ class PlaygroundParser:
 def apply_custom_css():
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-        * { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
-        html, body, [class*="css"] { font-size: 16px; }
-        .main .block-container { padding-top: 1.5rem; max-width: 1400px; }
-        .app-header {
-            background: linear-gradient(120deg, #0B1D14 0%, #1B4332 55%, #2D6A4F 100%);
-            padding: 1.45rem 1.9rem; border-radius: 14px; margin-bottom: 1.4rem; color: #fff;
-        }
-        .app-header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.4px; }
-        .app-header p { margin: 0.35rem 0 0; opacity: 0.72; font-size: 0.95rem; }
+    /* ========================================================================
+       Bento design system.
 
-        /* KPI cards. A hairline border and a 3px accent rule replace the old
-           heavy left bar and drop shadow: less chrome competing with the
-           numbers, which are the only thing on the card worth looking at. */
-        .kpi-card {
-            background: #fff; border: 1px solid #E6EBE8; border-radius: 14px;
-            padding: 1.05rem 1.2rem; position: relative; overflow: hidden;
-            transition: border-color .15s ease, transform .15s ease;
-        }
-        .kpi-card:hover { border-color: #C3D6CB; transform: translateY(-1px); }
-        .kpi-card::before {
-            content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-            width: 3px; background: #2D6A4F;
-        }
-        .kpi-card.gold::before   { background: #D4A843; }
-        .kpi-card.red::before    { background: #E63946; }
-        .kpi-card.blue::before   { background: #457B9D; }
-        .kpi-card.orange::before { background: #E76F51; }
-        .kpi-label {
-            font-size: 0.78rem; color: #6B7C73; font-weight: 600;
-            letter-spacing: 0.02em; margin-bottom: 0.1rem;
-        }
-        /* tabular-nums keeps digits the same width, so figures stacked in a
-           row of cards line up instead of jittering column to column. */
-        .kpi-value {
-            font-size: 1.65rem; font-weight: 700; color: #12291F; margin: 0.1rem 0 0;
-            line-height: 1.15; font-variant-numeric: tabular-nums;
-        }
-        .kpi-delta { font-size: 0.85rem; font-weight: 600; margin-top: 0.3rem; }
-        .kpi-delta.up { color: #2D6A4F; }
-        .kpi-delta.down { color: #E63946; }
-        .kpi-caption { font-size: 0.76rem; color: #8A9990; margin-top: 0.2rem; }
-        section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0B1D14, #1B4332); }
-        section[data-testid="stSidebar"] .stMarkdown { color: #D8F3DC; font-size: 1rem; }
-        section[data-testid="stSidebar"] .stRadio label { font-size: 1.05rem !important; }
-        .login-box { max-width: 460px; margin: 4rem auto; padding: 2.5rem; background: white; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); }
-        .login-box h2 { text-align: center; color: #1B4332; margin-bottom: 0.3rem; font-size: 1.8rem; }
-        .login-box p { text-align: center; color: #888; font-size: 1rem; margin-bottom: 1.5rem; }
-        .upload-info { background: #F0FFF4; border: 1px dashed #52B788; border-radius: 10px; padding: 1rem 1.5rem; margin-bottom: 1rem; font-size: 1rem; }
-        .stat-pill { display: inline-block; background: #F0FFF4; color: #1B4332; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.95rem; font-weight: 600; margin-right: 0.5rem; }
-        /* Streamlit global overrides */
-        .stTabs [data-baseweb="tab-list"] { gap: 0.3rem; border-bottom: 1px solid #E6EBE8; }
-        .stTabs [data-baseweb="tab"] {
-            font-size: 0.97rem !important; font-weight: 600;
-            padding: 0.55rem 0.9rem; color: #6B7C73;
-        }
-        .stTabs [aria-selected="true"] { color: #1B4332 !important; }
-        .stSelectbox label, .stMultiSelect label, .stDateInput label {
-            font-size: 0.9rem !important; font-weight: 600; color: #4A5A52;
-        }
-        /* tabular-nums again here: columns of rupiah figures only scan cleanly
-           when the digits share a width. */
-        .stDataFrame { font-size: 0.92rem; font-variant-numeric: tabular-nums; }
-        [data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
-        .stMarkdown p, .stMarkdown li { font-size: 0.98rem; }
-        h1 { font-size: 1.9rem !important; letter-spacing: -0.3px; }
-        h2 { font-size: 1.45rem !important; letter-spacing: -0.2px; }
-        h3 { font-size: 1.15rem !important; }
-        h4 { font-size: 1rem !important; color: #1B4332; margin-top: 0.4rem; }
-        .stButton button { font-size: 0.95rem !important; border-radius: 9px; font-weight: 600; }
-        hr { margin: 1.35rem 0; border-color: #E6EBE8; }
+       Streamlit renders its own wrappers, so most of the work here is
+       neutralising default padding and gaps before the card system can sit on
+       top. Anything targeting data-testid is compensating for that, not
+       decoration.
+       ==================================================================== */
+    :root{
+      --bg:#EFEFEC; --card:#FFFFFF; --ink:#131715; --ink-2:#4A524D; --muted:#8B948D;
+      --line:#EBECE8; --chip:#F4F5F2;
+      --g900:#103D28; --g700:#1A6B3F; --g500:#2E9160; --g100:#DCEEE4; --g50:#EEF6F1;
+      --amber:#B7791F; --amber-bg:#FCF3E3; --red:#C0483C; --red-bg:#FBEDEB;
+      --r:18px;
+    }
+    .stApp{background:var(--bg)}
+    .main .block-container{padding:14px 18px 40px;max-width:1240px}
+    html,body,[class*="css"]{
+      font-family:ui-rounded,"SF Pro Rounded","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+    }
+    .num{font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+
+    /* Streamlit stacks blocks with a gap; the bento grid supplies its own. */
+    [data-testid="stVerticalBlock"]{gap:.55rem}
+    [data-testid="stHorizontalBlock"]{gap:.6rem}
+    header[data-testid="stHeader"]{background:transparent;height:0}
+    footer{display:none}
+
+    /* ---------------- sidebar as a floating white panel ---------------- */
+    section[data-testid="stSidebar"]{background:var(--bg);padding:14px 0 14px 14px}
+    section[data-testid="stSidebar"] > div{background:var(--card);border-radius:var(--r);padding-top:6px}
+    section[data-testid="stSidebar"] .stMarkdown{color:var(--ink)}
+    .sb-logo{display:flex;align-items:center;gap:9px;padding:6px 4px 2px}
+    .sb-logo .mark{width:27px;height:27px;border-radius:50%;background:var(--g700);color:#fff;
+      display:grid;place-items:center;font-size:12px;font-weight:800}
+    .sb-logo b{font-size:15.5px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+    .sb-who{padding:2px 4px 0}
+    .sb-who b{font-size:12.5px;color:var(--ink)}
+    .sb-who small{display:block;font-size:10.5px;color:var(--muted)}
+    .sb-stats{display:flex;gap:6px;padding:8px 4px 2px;flex-wrap:wrap}
+    .sb-stats span{background:var(--chip);border-radius:20px;padding:3px 9px;font-size:10.5px;
+      font-weight:700;color:var(--ink-2)}
+
+    /* radio -> nav list */
+    section[data-testid="stSidebar"] [role="radiogroup"]{gap:1px}
+    section[data-testid="stSidebar"] [role="radiogroup"] label{
+      padding:7px 10px;border-radius:11px;font-size:12.5px;color:var(--muted);font-weight:500;
+      transition:background .12s,color .12s}
+    section[data-testid="stSidebar"] [role="radiogroup"] label:hover{background:var(--chip);color:var(--ink)}
+    section[data-testid="stSidebar"] [role="radiogroup"] label p{font-size:12.5px!important;margin:0}
+    section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){
+      background:var(--g50);color:var(--ink);font-weight:700}
+    section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p{font-weight:700!important}
+    section[data-testid="stSidebar"] [role="radiogroup"] input{display:none}
+
+    /* ---------------- top bar ---------------- */
+    .topbar{background:var(--card);border-radius:var(--r);padding:10px 15px;display:flex;
+      align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+    .topbar .search{flex:1;min-width:170px;display:flex;align-items:center;gap:9px;
+      background:var(--chip);border-radius:20px;padding:8px 13px;color:var(--muted);font-size:12.5px}
+    .topbar .kbd{margin-left:auto;background:var(--card);border-radius:6px;padding:2px 6px;font-size:10px}
+    .topbar .av{width:33px;height:33px;border-radius:50%;background:var(--g100);color:var(--g700);
+      display:grid;place-items:center;font-weight:800;font-size:12.5px}
+    .topbar .who b{display:block;font-size:12.5px;color:var(--ink)}
+    .topbar .who small{font-size:10.5px;color:var(--muted)}
+
+    /* ---------------- page head ---------------- */
+    .phead h1{margin:0;font-size:25px;font-weight:800;letter-spacing:-.035em;color:var(--ink)}
+    .phead p{margin:4px 0 0;color:var(--muted);font-size:12.5px}
+
+    /* ---------------- cards ---------------- */
+    .box{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);
+      padding:15px;height:100%}
+    .box.dark{background:var(--g900);border-color:var(--g900);color:#fff}
+    .box h3{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+    .box.dark h3{color:#fff}
+    .kpi .lb{display:flex;justify-content:space-between;align-items:center;gap:8px;
+      font-size:12.5px;font-weight:600;color:var(--ink-2)}
+    .box.dark .lb{color:#DCEEE4}
+    .arw{width:25px;height:25px;border-radius:50%;border:1.5px solid var(--line);display:grid;
+      place-items:center;font-size:10px;color:var(--muted);flex:none}
+    .box.dark .arw{border-color:rgba(255,255,255,.28);background:#fff;color:var(--g900)}
+    .kpi .v{font-size:31px;font-weight:800;margin:8px 0 7px;letter-spacing:-.04em}
+    .kpi .d{font-size:10.5px;display:flex;align-items:center;gap:5px;color:var(--muted);flex-wrap:wrap}
+    .kpi .d i{font-style:normal;background:var(--g100);color:var(--g700);border-radius:5px;
+      padding:1px 5px;font-weight:700}
+    .box.dark .d{color:#9FC5AF}
+    .box.dark .d i{background:rgba(255,255,255,.14);color:#fff}
+    .kpi .d.warn i{background:var(--red-bg);color:var(--red)}
+
+    /* ---------------- rows, chips, gauge ---------------- */
+    .rows{display:flex;flex-direction:column;gap:10px}
+    .row{display:flex;align-items:center;gap:10px}
+    .sq{width:26px;height:26px;border-radius:9px;flex:none;display:grid;place-items:center;
+      font-size:9.5px;font-weight:800;color:#fff}
+    .row b{display:block;font-size:12px;font-weight:700;color:var(--ink)}
+    .row small{display:block;font-size:10.5px;color:var(--muted);margin-top:1px}
+    .row .amt{margin-left:auto;font-size:11.5px;font-weight:700;white-space:nowrap}
+    .tag{margin-left:auto;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+    .tag.up{background:var(--g50);color:var(--g700)}
+    .tag.dn{background:var(--red-bg);color:var(--red)}
+    .tag.fl{background:var(--amber-bg);color:var(--amber)}
+    .gwrap{display:grid;place-items:center;padding-top:2px}
+    .gwrap .in{position:relative;width:172px;height:99px}
+    .gwrap .val{position:absolute;left:0;right:0;bottom:0;text-align:center}
+    .gwrap .val b{display:block;font-size:28px;font-weight:800;letter-spacing:-.04em;color:var(--ink)}
+    .gwrap .val small{font-size:10.5px;color:var(--muted)}
+    .foot{font-size:10.5px;color:var(--muted);margin:11px 0 0;line-height:1.5}
+    .box.dark .foot{color:#9FC5AF}
+    .big-alert{font-size:19px;font-weight:800;letter-spacing:-.03em;line-height:1.25;
+      margin:0 0 6px;color:var(--red)}
+
+    /* ---------------- controls ---------------- */
+    .stButton button{border-radius:20px;font-weight:700;font-size:12.5px;border:1.5px solid var(--line);
+      background:var(--card);color:var(--ink);padding:7px 16px}
+    .stButton button[kind="primary"]{background:var(--g700);border-color:var(--g700);color:#fff}
+    .stSelectbox label,.stMultiSelect label,.stDateInput label{
+      font-size:11px!important;font-weight:700;color:var(--muted);
+      letter-spacing:.08em;text-transform:uppercase}
+    .stSelectbox div[data-baseweb="select"] > div,.stDateInput input{
+      border-radius:12px!important;border-color:var(--line)!important;background:var(--card)!important}
+    .stTabs [data-baseweb="tab-list"]{gap:4px;border-bottom:1.5px solid var(--line)}
+    .stTabs [data-baseweb="tab"]{font-size:12.5px!important;font-weight:600;color:var(--muted);
+      padding:8px 13px}
+    .stTabs [aria-selected="true"]{color:var(--ink)!important;font-weight:700}
+    .stDataFrame{font-variant-numeric:tabular-nums;font-size:12.5px}
+    [data-testid="stMetricValue"]{font-variant-numeric:tabular-nums}
+    h1,h2,h3,h4{color:var(--ink);letter-spacing:-.02em}
+    h2{font-size:1.3rem!important} h3{font-size:1.05rem!important}
+    .login-box{max-width:430px;margin:4rem auto;padding:2.2rem;background:var(--card);
+      border-radius:var(--r);border:1.5px solid var(--line)}
+    .login-box h2{text-align:center;margin-bottom:.2rem}
+    .login-box p{text-align:center;color:var(--muted);margin-bottom:1.2rem}
+    .upload-info{background:var(--g50);border:1.5px solid var(--g100);border-radius:14px;
+      padding:12px 16px;margin-bottom:12px;font-size:12.5px}
     </style>
     """, unsafe_allow_html=True)
 
 
+# Fixed hue per tenant. Colour means WHO, so the same brand keeps its mark in
+# every list and every chart, and a chart needs no legend to be read.
+TENANT_HUES = ["#1A6B3F", "#C08A2C", "#6B7B3A", "#3B4C7A", "#8A5B6E", "#7A5230",
+               "#2E9160", "#9E6B4A", "#4A6B7B", "#7B4A6B"]
+
+
+def tenant_hue(tenant_id, name=""):
+    """
+    Stable colour per tenant, keyed on tenant_id so a brand keeps its mark on
+    every page and in every chart.
+
+    Keyed on the id rather than a hash of the name, because hashing names
+    collides -- "Ruuang Kopi" and "Omonyo" landed on the same hue -- and two
+    tenants sharing a colour destroys the one thing the colour is there to say.
+    """
+    digits = "".join(ch for ch in str(tenant_id or "") if ch.isdigit())
+    key = int(digits) if digits else sum(ord(c) for c in str(name or tenant_id))
+    return TENANT_HUES[key % len(TENANT_HUES)]
+
+
+def initials(name):
+    parts = [p for p in str(name).replace("'", " ").split() if p]
+    if not parts: return "?"
+    if len(parts) == 1: return parts[0][:2].upper()
+    return (parts[0][0] + parts[1][0]).upper()
+
+
 def render_header(subtitle=None):
-    # The old subtitle still read "Local Mode (SQLite)", inherited from the
-    # offline build. Pages may now pass their own; the default describes what
-    # this deployment actually is.
-    sub = subtitle or f"Area Management Dashboard · GROVE at CIBIS · v{APP_VERSION}"
+    user = st.session_state.get("user", {})
+    name = user.get("display_name", "Pengguna")
     st.markdown(f"""
-    <div class="app-header">
-        <h1>{APP_ICON} {APP_TITLE}</h1>
-        <p>{sub}</p>
+    <div class="topbar">
+      <div class="search"><span>&#9906;</span><span>Cari tenant atau unit</span>
+        <span class="kbd">Ctrl K</span></div>
+      <div style="display:flex;align-items:center;gap:9px">
+        <div class="av">{initials(name)}</div>
+        <div class="who"><b>{name}</b><small>{user.get('role','')}</small></div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
 
-def render_kpi(label, value, delta=None, variant="", caption=None):
-    delta_html = ""
+def render_page_head(title, sub=""):
+    st.markdown(f'<div class="phead"><h1>{title}</h1><p>{sub}</p></div>',
+                unsafe_allow_html=True)
+
+
+def render_kpi(label, value, delta=None, variant="", caption=None, featured=False):
+    """One KPI tile. featured=True inverts it to the dark card, which is how
+    the design marks the single figure that matters most."""
+    d = ""
     if delta is not None:
-        cls = "up" if delta >= 0 else "down"
-        arrow = "↑" if delta >= 0 else "↓"
-        delta_html = f'<div class="kpi-delta {cls}">{arrow} {abs(delta):.1f}%</div>'
-    cap_html = f'<div class="kpi-caption">{caption}</div>' if caption else ""
+        cls = "warn" if delta < 0 else ""
+        arrow = "&#8593;" if delta >= 0 else "&#8595;"
+        tail = f"<span>{caption}</span>" if caption else ""
+        d = f'<div class="d {cls}"><i>{arrow} {abs(delta):.1f}%</i>{tail}</div>'
+    elif caption:
+        d = f'<div class="d">{caption}</div>'
     st.markdown(f"""
-    <div class="kpi-card {variant}">
-        <div class="kpi-label">{label}</div>
-        <div class="kpi-value">{value}</div>
-        {delta_html}{cap_html}
+    <div class="box kpi {'dark' if featured else ''}">
+      <div class="lb">{label}<span class="arw">&#8599;</span></div>
+      <div class="v num">{value}</div>
+      {d}
     </div>
+    """, unsafe_allow_html=True)
+
+
+def render_rows(items):
+    """items: list of (tenant_id, name, sub, right_html)."""
+    body = "".join(
+        f'<div class="row"><span class="sq" style="background:{tenant_hue(tid, n)}">'
+        f'{initials(n)}</span><div><b>{n}</b><small>{s}</small></div>{r}</div>'
+        for tid, n, s, r in items)
+    st.markdown(f'<div class="rows">{body}</div>', unsafe_allow_html=True)
+
+
+def move_tag(pct):
+    if pct is None: return '<span class="tag fl">baru</span>'
+    cls = "up" if pct >= 0 else ("dn" if pct <= -10 else "fl")
+    arrow = "&#8593;" if pct >= 0 else "&#8595;"
+    return f'<span class="tag {cls}">{arrow} {abs(pct):.1f}%</span>'
+
+
+def render_gauge(pct, label):
+    """Half-circle arc. Drawn as SVG rather than a Plotly indicator so the
+    stroke caps stay round and it matches the rest of the card system."""
+    p = max(0.0, min(float(pct), 1.0))
+    length = 214.0
+    st.markdown(f"""
+    <div class="gwrap"><div class="in">
+      <svg width="172" height="99" viewBox="0 0 170 98" aria-label="{label} {p*100:.0f} persen">
+        <path d="M17 90 A68 68 0 0 1 153 90" fill="none" stroke="#F3F4F1"
+              stroke-width="17" stroke-linecap="round"/>
+        <path d="M17 90 A68 68 0 0 1 153 90" fill="none" stroke="#1A6B3F" stroke-width="17"
+              stroke-linecap="round" stroke-dasharray="{length}"
+              stroke-dashoffset="{length * (1 - p):.1f}"/>
+      </svg>
+      <div class="val"><b class="num">{p*100:.0f}%</b><small>{label}</small></div>
+    </div></div>
     """, unsafe_allow_html=True)
 
 
@@ -720,17 +857,15 @@ def render_sidebar():
     user = st.session_state["user"]
     role = user["role"]
     with st.sidebar:
-        st.markdown("### 🌿 GROVE Analytics")
-        st.markdown(f"**{user['display_name']}**")
-        st.caption(f"{user['email']} · {role}")
-
         stats = get_db().get_db_stats()
-        st.markdown(
-            f'<span class="stat-pill">🍽️ {stats["sales_rows"]:,}</span>'
-            f'<span class="stat-pill">🎪 {stats["pg_rows"]:,}</span>'
-            f'<span class="stat-pill">☁️ Cloud</span>',
-            unsafe_allow_html=True
-        )
+        st.markdown(f"""
+        <div class="sb-logo"><span class="mark">G</span><b>GROVE</b></div>
+        <div class="sb-who"><b>{user['display_name']}</b><small>{role}</small></div>
+        <div class="sb-stats">
+          <span>F&amp;B {stats["sales_rows"]:,}</span>
+          <span>Playground {stats["pg_rows"]:,}</span>
+        </div>
+        """, unsafe_allow_html=True)
         st.divider()
 
         menu = [
@@ -1950,12 +2085,6 @@ def page_dashboard_fnb():
     cf1, cf2, cf3 = st.columns([2, 2, 1])
     with cf1:
         sel_tenant = st.selectbox("\U0001f3e2 Tenant", tenant_list)
-    with cf2:
-        date_range = st.date_input("\U0001f4c5 Rentang Tanggal",
-            value=(date.today() - timedelta(days=30), date.today()), max_value=date.today())
-    with cf3:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("\U0001f504 Refresh", use_container_width=True)
 
     filt = None if sel_tenant == "All" else sel_tenant
     df = db.get_sales_data(filt)
@@ -1963,6 +2092,20 @@ def page_dashboard_fnb():
     if df.empty:
         st.info("\U0001f4ed Belum ada data. Upload file ESB melalui menu **Upload Data**.")
         return
+
+    # Bound the picker to the data, not to the calendar. Defaulting to the last
+    # 30 days of *today* opens the dashboard empty whenever the most recent
+    # upload is older than a month, which reads as a broken page rather than a
+    # filter that excluded everything.
+    dmin, dmax = df["sales_date"].min().date(), df["sales_date"].max().date()
+    with cf2:
+        date_range = st.date_input(
+            "\U0001f4c5 Rentang Tanggal",
+            value=(max(dmin, dmax - timedelta(days=30)), dmax),
+            min_value=dmin, max_value=dmax)
+    with cf3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("\U0001f504 Refresh", use_container_width=True)
 
     if isinstance(date_range, tuple) and len(date_range) == 2:
         s, e = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
@@ -2420,30 +2563,29 @@ def _unified_sales(db):
 
 
 def page_performance():
-    st.markdown("## 📈 Performa Tenant")
+    render_header()
     db = get_db()
     df = _unified_sales(db)
 
     if df.empty:
-        st.info(
-            "Belum ada data penjualan. Upload file ESB atau CSV Playground "
-            "lebih dulu, lalu halaman ini akan terisi otomatis."
-        )
+        render_page_head("Performa Tenant", "Belum ada data penjualan")
+        st.markdown(
+            '<div class="box"><h3>Belum ada data</h3>'
+            '<p style="font-size:12.5px;color:#8B948D;margin:0">Upload file ESB atau CSV '
+            'Playground lebih dulu — halaman ini akan terisi otomatis.</p></div>',
+            unsafe_allow_html=True)
         return
 
     months = sorted(df["month"].unique())
-    c1, c2 = st.columns([2, 3])
-    with c1:
-        month = st.selectbox("Periode", months, index=len(months) - 1)
+    month = st.selectbox("Periode", months, index=len(months) - 1)
     prev = months[months.index(month) - 1] if months.index(month) > 0 else None
 
     cur_df = df[df["month"] == month]
     prev_df = df[df["month"] == prev] if prev else df.iloc[0:0]
 
     # A month still in progress must never be measured against a complete one.
-    # Six days of April against all of March reads as a 76% collapse that never
-    # happened, and a monitoring page that cries wolf is one people stop
-    # reading. Clip the comparison to the same run of days on both sides.
+    # Six days against thirty-one reads as a collapse that never happened, and
+    # a page that cries wolf is one people stop opening.
     cutoff = None
     last_day = cur_df["sales_date"].max()
     if pd.notna(last_day) and last_day.date() < pd.Period(month, "M").end_time.date():
@@ -2451,127 +2593,177 @@ def page_performance():
         if prev:
             prev_df = prev_df[prev_df["sales_date"].dt.day <= cutoff]
 
-    with c2:
-        if not prev:
-            st.caption("Tidak ada periode sebelumnya untuk dibandingkan.")
-        elif cutoff:
-            st.caption(
-                f"Dibandingkan terhadap **{prev}**, dibatasi **tanggal 1–{cutoff}** "
-                f"di kedua sisi — data {month} memang baru sampai tanggal {cutoff}."
-            )
-        else:
-            st.caption(f"Dibandingkan terhadap **{prev}** — bulan penuh.")
+    if not prev:
+        sub = f"{month} · tidak ada periode sebelumnya untuk dibandingkan"
+    elif cutoff:
+        sub = f"{month} · dibandingkan {prev}, dibatasi tanggal 1–{cutoff} di kedua sisi"
+    else:
+        sub = f"{month} · dibandingkan {prev}, bulan penuh"
+    render_page_head("Performa Tenant", sub)
 
     def _agg(d):
         return (d.groupby(["tenant_id", "tenant_name"], dropna=False)
-                 .agg(sales=("nett_sales", "sum"),
-                      visitors=("visitors", "sum"),
-                      days=("sales_date", lambda s: s.dt.date.nunique()))
+                 .agg(sales=("nett_sales", "sum"), visitors=("visitors", "sum"))
                  .reset_index())
 
     cur, before = _agg(cur_df), _agg(prev_df)
-
-    # ---------- KPI ----------
     total, total_prev = cur["sales"].sum(), before["sales"].sum()
     vis, vis_prev = cur["visitors"].sum(), before["visitors"].sum()
-    growth = ((total - total_prev) / total_prev * 100) if total_prev else None
-    check = (total / vis) if vis else 0
-    check_prev = (total_prev / vis_prev) if vis_prev else 0
-
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Total Nett Sales", fmt_rp(total),
-              delta=f"{growth:+.1f}%" if growth is not None else None)
-    k2.metric("Pengunjung", f"{vis:,.0f}",
-              delta=f"{(vis-vis_prev)/vis_prev*100:+.1f}%" if vis_prev else None)
-    k3.metric("Rata-rata per Pengunjung", fmt_rp(check),
-              delta=f"{(check-check_prev)/check_prev*100:+.1f}%" if check_prev else None)
-    k4.metric("Tenant Aktif", f"{len(cur)}")
-
-    st.divider()
-
-    # ---------- Leaderboard ----------
-    targets = db.get_targets()
-    tmap = {}
-    if not targets.empty:
-        sel = targets[targets["period_month"].astype(str).str[:7] == month]
-        tmap = dict(zip(sel["tenant_id"], sel["target_nett"])) if not sel.empty else {}
+    check = total / vis if vis else 0
+    check_prev = total_prev / vis_prev if vis_prev else 0
+    pct = lambda a, b: ((a - b) / b * 100) if b else None
 
     prev_map = dict(zip(before["tenant_id"], before["sales"]))
-    spark = (cur_df.groupby(["tenant_id", cur_df["sales_date"].dt.date])["nett_sales"]
-                   .sum().groupby(level=0).apply(list).to_dict())
-
     board = cur.copy()
-    board["kontribusi"] = board["sales"] / total * 100 if total else 0
-    board["mom"] = board["tenant_id"].map(
-        lambda t: ((cur.loc[cur["tenant_id"] == t, "sales"].iloc[0] - prev_map[t]) / prev_map[t] * 100)
-        if t in prev_map and prev_map[t] else None)
+    board["mom"] = board.apply(
+        lambda r: pct(r["sales"], prev_map.get(r["tenant_id"], 0)), axis=1)
     board["avg_check"] = board.apply(
         lambda r: round(r["sales"] / r["visitors"]) if r["visitors"] else 0, axis=1)
-    board["target"] = board["tenant_id"].map(lambda t: tmap.get(t, 0))
-    board["capaian"] = board.apply(
-        lambda r: min(r["sales"] / r["target"], 2.0) if r["target"] else 0.0, axis=1)
-    board["tren"] = board["tenant_id"].map(lambda t: spark.get(t, []))
     board = board.sort_values("sales", ascending=False)
+    falling = board[board["mom"].notna() & (board["mom"] < -10)].sort_values("mom")
 
-    st.markdown("#### Peringkat tenant")
-    st.dataframe(
-        board[["tenant_name", "sales", "kontribusi", "mom", "avg_check",
-               "visitors", "capaian", "tren"]],
-        use_container_width=True, hide_index=True,
-        column_config={
-            "tenant_name": st.column_config.TextColumn("Tenant"),
-            "sales":       st.column_config.NumberColumn("Nett Sales (Rp)", format="localized"),
-            "kontribusi":  st.column_config.ProgressColumn(
-                               "Kontribusi", format="%.1f%%", min_value=0, max_value=100),
-            "mom":         st.column_config.NumberColumn("MoM", format="%+.1f%%"),
-            "avg_check":   st.column_config.NumberColumn("Rata-rata/Pengunjung (Rp)", format="localized"),
-            "visitors":    st.column_config.NumberColumn("Pengunjung", format="localized"),
-            "capaian":     st.column_config.ProgressColumn(
-                               "Capaian Target", format="%.0f%%", min_value=0, max_value=2.0),
-            "tren":        st.column_config.LineChartColumn("Tren Harian"),
-        })
-    if not tmap:
-        st.caption(
-            f"Kolom Capaian Target kosong karena target {month} belum diisi. "
-            "Isi di **Kelola Unit & Sewa → 🎯 Target**."
-        )
+    # ---------------- KPI row ----------------
+    k = st.columns(4)
+    with k[0]:
+        render_kpi("Nett Sales", fmt_rp(total), pct(total, total_prev), featured=True,
+                   caption=f"dari {fmt_rp(total_prev)}" if total_prev else None)
+    with k[1]:
+        render_kpi("Pengunjung", f"{vis:,.0f}".replace(",", "."), pct(vis, vis_prev),
+                   caption=f"dari {vis_prev:,.0f}".replace(",", ".") if vis_prev else None)
+    with k[2]:
+        render_kpi("Rata / Pengunjung", fmt_rp(check), pct(check, check_prev),
+                   caption=f"dari {fmt_rp(check_prev)}" if check_prev else None)
+    with k[3]:
+        render_kpi("Perlu Perhatian", f"{len(falling)}",
+                   caption="tenant turun lebih dari 10%")
 
-    # ---------- Perhatian ----------
-    if prev:
-        drop = board[board["mom"].notna() & (board["mom"] < -10)]
-        if not drop.empty:
-            st.markdown("#### ⚠️ Perlu perhatian")
-            basis = f"tanggal 1–{cutoff}" if cutoff else "bulan penuh"
-            for _, r in drop.sort_values("mom").iterrows():
-                st.warning(
-                    f"**{r['tenant_name']}** turun **{abs(r['mom']):.1f}%** "
-                    f"dibanding {prev} — {fmt_rp(r['sales'])} periode ini "
-                    f"(dasar perbandingan: {basis})."
-                )
+    # ---------------- row 2: chart | alert | tenant list ----------------
+    c = st.columns([2, 1, 1])
+    with c[0]:
+        st.markdown('<div class="box"><h3>Penjualan per hari</h3>', unsafe_allow_html=True)
+        day_id = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
+        daily = (cur_df.assign(dow=cur_df["sales_date"].dt.dayofweek)
+                       .groupby("dow")["nett_sales"].sum()
+                       .reindex(range(7), fill_value=0))
+        # Sunday first, matching how the week is read here.
+        order = [6, 0, 1, 2, 3, 4, 5]
+        vals = [float(daily.get(d, 0)) for d in order]
+        avg = sum(vals) / len(vals) if vals else 0
+        # Hatched below the weekly average, solid at or above it. The pattern
+        # carries a threshold, so the shape of the week reads before any number.
+        fig = go.Figure(go.Bar(
+            x=day_id, y=vals,
+            marker=dict(
+                color=["#1A6B3F" if v >= avg else "#F3F4F1" for v in vals],
+                cornerradius=22,
+                pattern=dict(shape=["" if v >= avg else "/" for v in vals],
+                             fgcolor="#D9DDD7", size=5, solidity=.28)),
+            hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"))
+        fig.update_layout(height=210, margin=dict(t=6, b=6, l=6, r=6),
+                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                          yaxis=dict(visible=False), xaxis=dict(showgrid=False),
+                          showlegend=False, bargap=.38)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.markdown(
+            '<p class="foot">Bar pekat menandai hari di atas rata-rata mingguan, '
+            'bar diarsir di bawahnya.</p></div>', unsafe_allow_html=True)
 
-    # ---------- Per unit ----------
+    with c[1]:
+        if not falling.empty:
+            w = falling.iloc[0]
+            st.markdown(f"""
+            <div class="box">
+              <h3 style="color:#C0483C">Perlu perhatian</h3>
+              <p class="big-alert">{w['tenant_name']} turun {abs(w['mom']):.1f}%</p>
+              <p style="font-size:11.5px;color:#8B948D;line-height:1.45;margin:0">
+                {fmt_rp(prev_map.get(w['tenant_id'], 0))} &rarr; {fmt_rp(w['sales'])}
+                pada periode ini.</p>
+              <p class="foot">{len(falling)} tenant turun lebih dari 10%.</p>
+            </div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="box">
+              <h3>Perlu perhatian</h3>
+              <p class="big-alert" style="color:#1A6B3F">Tidak ada</p>
+              <p style="font-size:11.5px;color:#8B948D;margin:0">Tidak ada tenant yang
+                 turun lebih dari 10% dibanding periode sebelumnya.</p>
+            </div>""", unsafe_allow_html=True)
+
+    with c[2]:
+        st.markdown('<div class="box"><h3>Tenant</h3>', unsafe_allow_html=True)
+        render_rows([(r["tenant_id"], r["tenant_name"],
+                      f"{r['visitors']:,.0f} pengunjung".replace(",", "."),
+                      f'<span class="amt num">{fmt_rp(r["sales"]).replace("Rp ", "")}</span>')
+                     for _, r in board.iterrows()])
+        st.markdown('<p class="foot">Warna tiap tenant tetap sama di seluruh aplikasi.</p></div>',
+                    unsafe_allow_html=True)
+
+    # ---------------- row 3: movement | target | occupancy ----------------
+    c2 = st.columns([2, 1, 1])
+    with c2[0]:
+        st.markdown('<div class="box"><h3>Pergerakan bulan ini</h3>', unsafe_allow_html=True)
+        render_rows([(r["tenant_id"], r["tenant_name"],
+                      f'{fmt_rp(r["avg_check"])} per pengunjung · '
+                      f'{r["visitors"]:,.0f} orang'.replace(",", "."),
+                      move_tag(r["mom"]))
+                     for _, r in board.iterrows()])
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with c2[1]:
+        targets = db.get_targets()
+        tmap = {}
+        if not targets.empty:
+            sel = targets[targets["period_month"].astype(str).str[:7] == month]
+            tmap = dict(zip(sel["tenant_id"], sel["target_nett"])) if not sel.empty else {}
+        target_total = sum(tmap.get(t, 0) for t in board["tenant_id"])
+        st.markdown('<div class="box"><h3>Capaian target</h3>', unsafe_allow_html=True)
+        if target_total:
+            render_gauge(total / target_total, f"dari {fmt_rp(target_total)}")
+        else:
+            render_gauge(0, "target belum diisi")
+            st.markdown('<p class="foot">Isi target di <b>Kelola Unit &amp; Sewa &rarr; '
+                        'Target</b> untuk mengaktifkan kolom ini.</p>',
+                        unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with c2[2]:
+        units, tenancies = db.get_units(), db.get_tenancies()
+        n_units = len(units) if not units.empty else 0
+        occupied = 0
+        if not tenancies.empty and n_units:
+            occupied = tenancies[tenancies["end_date"].isna()]["unit_id"].nunique()
+        bars = "".join(
+            f'<i style="flex:1;height:5px;border-radius:20px;background:'
+            f'{"#2E9160" if i < occupied else "rgba(255,255,255,.2)"}"></i>'
+            for i in range(max(n_units, 1)))
+        st.markdown(f"""
+        <div class="box dark">
+          <div class="lb">Okupansi unit<span class="arw">&#8599;</span></div>
+          <div class="v num" style="font-size:33px;font-weight:800;margin:9px 0 2px;
+               letter-spacing:-.04em">{occupied} / {n_units}</div>
+          <div class="foot" style="margin-top:2px">
+            {"Seluruh unit terisi" if occupied == n_units and n_units else
+             f"{n_units - occupied} unit kosong"}</div>
+          <div style="display:flex;gap:5px;margin-top:13px">{bars}</div>
+        </div>""", unsafe_allow_html=True)
+
+    # ---------------- per unit ----------------
     if "unit_code" in cur_df.columns and cur_df["unit_code"].notna().any():
-        st.markdown("#### Performa per unit")
-        st.caption(
-            "Diagregasi berdasarkan ruang, bukan brand. Kalau sebuah unit berganti "
-            "penyewa di tengah periode, angkanya menggabungkan kontribusi kedua brand "
-            "sesuai tanggal masing-masing."
-        )
-        per_unit = (cur_df.dropna(subset=["unit_code"])
-                          .groupby("unit_code")
-                          .agg(sales=("nett_sales", "sum"),
-                               visitors=("visitors", "sum"),
+        per_unit = (cur_df.dropna(subset=["unit_code"]).groupby("unit_code")
+                          .agg(sales=("nett_sales", "sum"), visitors=("visitors", "sum"),
                                brand=("tenant_name", lambda s: ", ".join(sorted(set(s)))))
                           .reset_index().sort_values("sales", ascending=False))
-        st.dataframe(
-            per_unit, use_container_width=True, hide_index=True,
+        st.markdown('<div class="box"><h3>Performa per unit</h3>', unsafe_allow_html=True)
+        st.dataframe(per_unit, use_container_width=True, hide_index=True,
             column_config={
                 "unit_code": st.column_config.TextColumn("Unit"),
+                "brand":     st.column_config.TextColumn("Brand pada periode ini"),
                 "sales":     st.column_config.NumberColumn("Nett Sales (Rp)", format="localized"),
                 "visitors":  st.column_config.NumberColumn("Pengunjung", format="localized"),
-                "brand":     st.column_config.TextColumn("Brand pada periode ini"),
             })
-
+        st.markdown('<p class="foot">Unit yang berganti penyewa di tengah periode '
+                    'menjumlahkan kontribusi kedua brand sesuai tanggal masing-masing.</p></div>',
+                    unsafe_allow_html=True)
 
 def _occupancy_table(units, tenancies):
     """One row per unit, with whoever occupies it today."""
@@ -3002,10 +3194,14 @@ def page_dashboard_playground():
         st.info("📭 Belum ada data Playground. Upload file CSV melalui menu **Upload Playground**.")
         return
 
+    # Same reasoning as the F&B dashboard: bound the picker to the data so the
+    # page never opens empty just because the latest upload predates today.
+    dmin, dmax = df["sales_date"].min().date(), df["sales_date"].max().date()
     cf1, cf2 = st.columns([2, 1])
     with cf1:
-        dr = st.date_input("📅 Rentang Tanggal", value=(date.today()-timedelta(days=30), date.today()),
-                            max_value=date.today(), key="pg_dr")
+        dr = st.date_input("📅 Rentang Tanggal",
+                           value=(max(dmin, dmax - timedelta(days=30)), dmax),
+                           min_value=dmin, max_value=dmax, key="pg_dr")
     with cf2:
         st.markdown("<br>", unsafe_allow_html=True)
         st.button("🔄 Refresh", use_container_width=True, key="pg_ref")
@@ -3278,8 +3474,9 @@ def page_master_dashboard():
     if not pg_empty: all_dates.extend(df_pg["sales_date"].dt.date.tolist())
     min_d, max_d = min(all_dates), max(all_dates)
 
-    dr = st.date_input("📅 Rentang Tanggal", value=(max_d-timedelta(days=30), max_d),
-                        max_value=max_d, key="master_dr")
+    dr = st.date_input("📅 Rentang Tanggal",
+                       value=(max(min_d, max_d - timedelta(days=30)), max_d),
+                       min_value=min_d, max_value=max_d, key="master_dr")
     if isinstance(dr, tuple) and len(dr) == 2:
         s, e = pd.Timestamp(dr[0]), pd.Timestamp(dr[1])
         if not fnb_empty: df_fnb = df_fnb[(df_fnb["sales_date"]>=s)&(df_fnb["sales_date"]<=e)]
