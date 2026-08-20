@@ -1152,17 +1152,77 @@ def page_tenants():
 # ============================================================================
 # USER MANAGEMENT
 # ============================================================================
+# --- Supabase Auth admin: akun login dashboard Vercel -----------------------
+# Streamlit login pakai email + allowlist domain; dashboard Vercel pakai
+# Supabase Auth (email + password). Kunci service_role di secrets sudah punya
+# hak admin ke Auth, jadi Kelola User bisa mengurus keduanya sekaligus.
+def _auth_admin():
+    return _get_client().auth.admin
+
+
+def auth_list_emails():
+    """Set email yang sudah punya akun dashboard. Gagal -> set kosong."""
+    try:
+        users = _auth_admin().list_users(page=1, per_page=1000)
+        return {(u.email or "").lower() for u in users if u.email}
+    except Exception:
+        return set()
+
+
+def _auth_find(email):
+    try:
+        users = _auth_admin().list_users(page=1, per_page=1000)
+        for u in users:
+            if (u.email or "").lower() == email.lower():
+                return u
+    except Exception:
+        pass
+    return None
+
+
+def auth_set_password(email, password):
+    """Buat akun dashboard, atau reset password bila sudah ada."""
+    u = _auth_find(email)
+    if u:
+        _auth_admin().update_user_by_id(u.id, {"password": password})
+        return "reset"
+    _auth_admin().create_user(
+        {"email": email, "password": password, "email_confirm": True})
+    return "baru"
+
+
+def auth_set_blocked(email, blocked):
+    """Blokir/buka akun dashboard. ban_duration mengikuti gotrue: '100 tahun'
+    sebagai nonaktif permanen, 'none' mencabutnya."""
+    u = _auth_find(email)
+    if not u:
+        return False
+    _auth_admin().update_user_by_id(
+        u.id, {"ban_duration": "876600h" if blocked else "none"})
+    return True
+
+
 def page_users():
     render_header()
     db = get_db()
     st.subheader("👥 Kelola User")
+    st.caption(
+        "Satu tempat untuk dua akses: data user aplikasi ini DAN akun login "
+        "dashboard Vercel (Supabase Auth). Kolom **Dashboard** menandai siapa "
+        "yang sudah bisa masuk ke dashboard."
+    )
     udf = db.get_all_users()
+    dash_emails = auth_list_emails()
     if not udf.empty:
-        st.dataframe(udf, use_container_width=True, hide_index=True)
+        view = udf.copy()
+        if "email" in view.columns:
+            view["Dashboard"] = view["email"].str.lower().map(
+                lambda e: "✅" if e in dash_emails else "—")
+        st.dataframe(view, use_container_width=True, hide_index=True)
     st.divider()
     c1,c2 = st.columns(2)
     with c1:
-        st.markdown("**Tambah / Update Role User**")
+        st.markdown("**Tambah / Update User**")
         st.caption("User dengan domain @srkel.id atau @teamup.id akan otomatis terdaftar sebagai Viewer saat pertama kali login. Gunakan form ini untuk mengubah role.")
         with st.form("add_user"):
             email = st.text_input("Email User", placeholder="nama@srkel.id")
@@ -1176,6 +1236,11 @@ def page_users():
                 acc_str = "ALL"
                 if role != "Viewer":
                     st.info("Admin & Super Admin → akses semua tenant.")
+            pw = st.text_input(
+                "Password dashboard Vercel (opsional)", type="password",
+                help="Diisi → akun login dashboard dibuat (atau password-nya "
+                     "di-reset bila sudah ada). Kosongkan → hanya data user "
+                     "aplikasi ini yang disimpan. Minimal 6 karakter.")
             if st.form_submit_button("💾 Simpan", use_container_width=True):
                 if email and dn:
                     existing = db.get_user(email)
@@ -1185,16 +1250,36 @@ def page_users():
                     else:
                         db.create_user(email, dn, role, acc_str, st.session_state["user"]["email"])
                         st.success(f"✅ User '{email}' ditambahkan sebagai {role}.")
-                    st.rerun()
+                    if pw:
+                        if len(pw) < 6:
+                            st.warning("⚠️ Password dashboard minimal 6 karakter — akun dashboard TIDAK dibuat.")
+                        else:
+                            try:
+                                mode = auth_set_password(email, pw)
+                                st.success("✅ Akun dashboard dibuat — bisa langsung login di Vercel."
+                                           if mode == "baru" else
+                                           "✅ Password dashboard di-reset.")
+                            except Exception as e:
+                                st.error(f"❌ Gagal membuat akun dashboard: {e}")
+                    if not pw:
+                        st.rerun()
     with c2:
         st.markdown("**Update Status User**")
+        st.caption("Nonaktif memblokir keduanya: aplikasi ini langsung, dashboard Vercel maksimal ~1 jam (masa berlaku sesi).")
         if not udf.empty:
             with st.form("upd_user"):
                 target = st.selectbox("Pilih User", udf["email"].tolist())
                 new_st = st.selectbox("Status", ["TRUE","FALSE"], format_func=lambda x: "Aktif" if x=="TRUE" else "Nonaktif")
                 if st.form_submit_button("🔄 Update", use_container_width=True):
                     db.update_user_status(target, new_st)
-                    st.success(f"✅ Status '{target}' diupdate.")
+                    try:
+                        if auth_set_blocked(target, new_st == "FALSE"):
+                            st.success(f"✅ Status '{target}' diupdate — akun dashboard ikut "
+                                       + ("diblokir." if new_st == "FALSE" else "dibuka."))
+                        else:
+                            st.success(f"✅ Status '{target}' diupdate (tidak punya akun dashboard).")
+                    except Exception:
+                        st.success(f"✅ Status '{target}' diupdate. ⚠️ Akun dashboard gagal disentuh — cek manual di Supabase.")
                     st.rerun()
 
 
