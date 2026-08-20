@@ -1242,7 +1242,13 @@ def page_users():
                      "di-reset bila sudah ada). Kosongkan → hanya data user "
                      "aplikasi ini yang disimpan. Minimal 6 karakter.")
             if st.form_submit_button("💾 Simpan", use_container_width=True):
-                if email and dn:
+                # Copy-paste sering membawa spasi; Supabase Auth menolaknya
+                # sebagai "invalid format", jadi bersihkan lalu validasi dulu.
+                email = (email or "").strip().lower()
+                dn = (dn or "").strip()
+                if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+                    st.error(f"❌ Format email tidak valid: '{email}' — periksa typo/spasi.")
+                elif email and dn:
                     existing = db.get_user(email)
                     if existing:
                         db.update_user_role(email, role, acc_str)
