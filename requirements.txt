@@ -1,6 +1,5 @@
 streamlit==1.45.1
 pandas==2.2.3
-plotly==6.0.1
 openpyxl==3.1.5
 # Range rather than a pin: supabase-py ships frequently and the 2.x API used
 # here (table/select/insert/upsert/range/count) is stable across the series.
